@@ -1,4 +1,5 @@
 import re
+import hashlib
 from typing import Optional
 
 import google.generativeai as genai
@@ -205,6 +206,7 @@ LEADERBOARD_SCHEMA = [
     "POINTS",
     "DEED_TYPE",
     "ACTION_CONTEXT",
+    "IMAGE_HASH",
     "CREATED_AT",
 ]
 
@@ -252,6 +254,7 @@ def create_user_entry(session: Session, username: str, wallet_address: str) -> N
                 "USER_CREATED",
                 "Guardian joined Aether-Chain",
                 None,
+                None,
             ]
         ],
         schema=LEADERBOARD_SCHEMA,
@@ -279,14 +282,26 @@ def record_deed(
     action_context: str,
     points: int,
     deed_type: str,
+    image_hash: Optional[str],
 ) -> None:
     """Record a deed verification result to Snowflake safely."""
     row_df = session.create_dataframe(
-        [[username, wallet_address, points, deed_type, action_context, None]],
+        [[username, wallet_address, points, deed_type, action_context, image_hash, None]],
         schema=LEADERBOARD_SCHEMA,
     )
     row_df = row_df.with_column("CREATED_AT", F.current_timestamp())
     row_df.write.mode("append").save_as_table(LEADERBOARD_TABLE)
+
+
+def deed_image_already_submitted(session: Session, username: str, image_hash: str) -> bool:
+    """Check whether the user has already submitted the same image hash."""
+    count = (
+        get_leaderboard_df(session)
+        .filter(F.upper(F.col("USERNAME")) == F.lit(username.upper()))
+        .filter(F.col("IMAGE_HASH") == F.lit(image_hash))
+        .count()
+    )
+    return count > 0
 
 
 # ============================================================================
@@ -369,6 +384,13 @@ def verify_deed_with_gemini(image: Image.Image, action_context: str) -> tuple[bo
         prompt = f"""
         Analyze this image in the context of the described environmental action: "{action_context}".
 
+        Determine if this image is a generic stock photo or a personal, real-world photograph.
+        If it looks like a high-quality studio stock image or an image sourced from the internet,
+        set verified: false and analysis: "Please upload a real, personal photo of your deed."
+        Determine if this image is a real, original photograph taken by a user or a professional
+        stock photo/internet-sourced image. If the image is a stock photo, reject it even if it
+        shows the correct environmental action.
+
         Return strict JSON with keys:
         verified: boolean
         points: integer (10 only when verified=true, else 0)
@@ -406,6 +428,8 @@ if "wallet_address" not in st.session_state:
     st.session_state.wallet_address = None
 if "daily_wisdom" not in st.session_state:
     st.session_state.daily_wisdom = None
+if "last_processed_submission_key" not in st.session_state:
+    st.session_state.last_processed_submission_key = None
 
 
 # ============================================================================
@@ -543,12 +567,34 @@ def dashboard_page() -> None:
         else:
             st.info("🎬 Video uploaded. Current verifier supports images only; please upload a representative image.")
 
-        if st.button("✅ Verify & Claim Rewards", type="primary", use_container_width=True):
+        file_bytes = uploaded_file.getvalue()
+        image_hash = hashlib.sha256(file_bytes).hexdigest()
+        submission_key = (
+            f"{st.session_state.username}:{uploaded_file.name}:{len(file_bytes)}:{image_hash}"
+        )
+
+        if st.session_state.last_processed_submission_key == submission_key:
+            st.warning("⚠️ You have already submitted this specific upload in this session.")
+
+        verify_clicked = st.button(
+            "✅ Verify & Claim Rewards",
+            type="primary",
+            use_container_width=True,
+            disabled=st.session_state.last_processed_submission_key == submission_key,
+        )
+        if verify_clicked:
             if not is_image:
                 st.warning("⚠️ Please upload a JPG or PNG image for AI verification.")
             else:
                 with st.spinner("🔍 Analyzing your deed with Gemini AI..."):
                     try:
+                        if deed_image_already_submitted(session, st.session_state.username, image_hash):
+                            st.warning("⚠️ This image was already used for rewards. Upload a new deed photo.")
+                            st.session_state.last_processed_submission_key = submission_key
+                            st.markdown("</div>", unsafe_allow_html=True)
+                            return
+
+                        st.session_state.last_processed_submission_key = submission_key
                         img = Image.open(uploaded_file)
                         verified, points, analysis = verify_deed_with_gemini(img, action_context)
 
@@ -560,6 +606,7 @@ def dashboard_page() -> None:
                             action_context,
                             points,
                             deed_type,
+                            image_hash,
                         )
 
                         if verified:
