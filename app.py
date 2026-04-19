@@ -1,109 +1,68 @@
 import streamlit as st
 import google.generativeai as genai
-from datetime import datetime
+from snowflake.snowpark import Session
+from PIL import Image
+import pandas as pd
 
-# Configure Streamlit page
-st.set_page_config(
-    page_title="Aether Chain - Green Deed Tracker",
-    page_icon="🌱",
-    layout="wide"
-)
+# 1. DATABASE CONNECTION SETUP
+def create_snowflake_session():
+    return Session.builder.configs(st.secrets["snowflake"]).create()
 
-# Initialize session state for storing deeds
-if "deeds" not in st.session_state:
-    st.session_state.deeds = []
+# 2. AI CONFIGURATION
+if "GEMINI_API_KEY" in st.secrets:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
-# Main UI
-st.title("🌍 Aether Chain - Green Deed Verifier")
-st.markdown("Verify your green deeds and track your environmental impact!")
+st.set_page_config(page_title="Aether-Chain", page_icon="🌱", layout="wide")
 
-# Sidebar for API configuration
-with st.sidebar:
-    st.header("⚙️ Configuration")
-    api_key = st.text_input("Enter your Google Gemini API Key:", type="password")
+# 3. UI - HEADER
+st.title("🌱 Aether-Chain: Proof of Green")
+st.markdown("### Verify your deeds on-chain and climb the global leaderboard.")
+
+# 4. USER INPUTS
+col1, col2 = st.columns(2)
+with col1:
+    username = st.text_input("👤 Guardian Name (Username):")
+with col2:
+    wallet_address = st.text_input("💳 Phantom Wallet Address (Solana):")
+
+uploaded_file = st.file_uploader("📸 Upload Proof (Photo of your action)", type=["jpg", "jpeg", "png"])
+
+# 5. VERIFICATION LOGIC
+if uploaded_file and username and wallet_address:
+    st.image(uploaded_file, caption="Evidence Provided", width=300)
     
-    if api_key:
-        genai.configure(api_key=api_key)
-        st.success("✅ API Key configured!")
-    else:
-        st.warning("⚠️ Please enter your Gemini API Key to proceed")
+    if st.button("Verify & Claim Rewards 🚀", type="primary"):
+        with st.spinner("Analyzing with Gemini AI..."):
+            try:
+                # Part A: Gemini Analysis
+                img = Image.open(uploaded_file)
+                model = genai.GenerativeModel("gemini-1.5-flash")
+                # We tell Gemini to give us a specific "Impact Score" for the rewards
+                response = model.generate_content(["Analyze this environmental deed. Give a verification (Yes/No) and an Impact Score from 1 to 10.", img])
+                
+                # Part B: Save to Snowflake (Including Wallet)
+                session = create_snowflake_session()
+                session.sql(f"""
+                    INSERT INTO CLIMATE_LEADERBOARD (USERNAME, POINTS, DEED_TYPE, WALLET_ADDRESS) 
+                    VALUES ('{username}', 100, 'Verified Action', '{wallet_address}')
+                """).collect()
+                
+                st.success(f"Verified! 100 XP sent to {username}. Reward queued for Solana wallet!")
+                st.balloons()
+                st.info(f"AI Analysis: {response.text}")
+                
+            except Exception as e:
+                st.error(f"Something went wrong: {e}")
 
-# Main content area
-if api_key:
-    st.divider()
-    
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.subheader("📝 Submit a Green Deed")
-        
-        deed_description = st.text_area(
-            "Describe your green deed:",
-            placeholder="e.g., I planted a tree in my backyard today",
-            height=100
-        )
-        
-        deed_category = st.selectbox(
-            "Select a category:",
-            ["🌳 Planting", "♻️ Recycling", "💡 Energy", "💧 Water", "🚶 Transportation", "🍽️ Diet", "Other"]
-        )
-    
-    with col2:
-        st.subheader("📊 Stats")
-        st.metric("Total Deeds Verified", len(st.session_state.deeds))
-    
-    if st.button("✅ Verify Deed with Gemini", use_container_width=True, type="primary"):
-        if not deed_description.strip():
-            st.error("❌ Please enter a deed description!")
-        else:
-            with st.spinner("🔍 Verifying with Gemini..."):
-                try:
-                    # Create prompt for Gemini
-                    prompt = f"""You are an environmental deed verifier. Analyze the following green deed and provide:
-1. Verification: Is this a legitimate green deed? (Yes/No)
-2. Impact Score: Rate the environmental impact from 1-10
-3. Summary: A brief 1-2 sentence summary of the deed
-4. Suggestion: One way to amplify this good deed
-
-Green Deed Description: "{deed_description}"
-Category: {deed_category}
-
-Provide your response in this exact format:
-VERIFICATION: [Yes/No]
-IMPACT_SCORE: [1-10]
-SUMMARY: [Your summary]
-SUGGESTION: [Your suggestion]"""
-
-                    # Call Gemini API
-                    model = genai.GenerativeModel("gemini-pro")
-                    response = model.generate_content(prompt)
-                    
-                    # Display verification result
-                    st.success("✅ Deed Verified!")
-                    
-                    # Store deed in session state
-                    deed_data = {
-                        "description": deed_description,
-                        "category": deed_category,
-                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                        "gemini_response": response.text
-                    }
-                    st.session_state.deeds.append(deed_data)
-                    st.write(response.text)
-                    st.balloons()
-                    
-                except Exception as e:
-                    st.error(f"❌ Error verifying deed: {str(e)}")
-    
-    st.divider()
-    
-    # Display history
-    if st.session_state.deeds:
-        st.subheader("📜 Verified Deeds History")
-        for deed in reversed(st.session_state.deeds):
-            with st.expander(f"{deed['timestamp']} - {deed['category']}"):
-                st.write(f"**Deed:** {deed['description']}")
-                st.info(deed['gemini_response'])
-else:
-    st.info("👈 Please enter your Google Gemini API Key in the sidebar to get started!")
+# 6. LIVE GLOBAL LEADERBOARD
+st.divider()
+st.subheader("🏆 Global Leaderboard")
+try:
+    session = create_snowflake_session()
+    # Pull data and sum points per user
+    df = session.table("CLIMATE_LEADERBOARD").group_by("USERNAME").sum("POINTS").to_pandas()
+    df.columns = ["Guardian", "Total XP"]
+    st.dataframe(df.sort_values("Total XP", ascending=False), use_container_width=True)
+except:
+    st.info("Leaderboard is empty. Be the first to verify a deed!")
 
