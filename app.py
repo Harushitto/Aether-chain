@@ -444,6 +444,16 @@ st.markdown(
         object-fit: cover;
     }
 
+    .profile-corner-avatar {
+        width: 62px;
+        height: 62px;
+        border-radius: 50%;
+        border: 2px solid var(--accent-green);
+        box-shadow: 0 0 10px var(--accent-green);
+        object-fit: cover;
+        background: var(--card-bg);
+    }
+
     .success-modal {
         animation: modal-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
         border: 1px solid rgba(115, 255, 170, 0.95);
@@ -657,6 +667,24 @@ def get_username_by_wallet_address(session: Session, wallet_address: str) -> Opt
     if not rows:
         return None
     return str(rows[0]["USERNAME"]).strip() if rows[0]["USERNAME"] else None
+
+
+def get_guardian_profile_by_wallet(session: Session, wallet_address: str) -> Optional[dict[str, Optional[str]]]:
+    """Return persisted Guardian profile fields for a wallet, if present."""
+    rows = (
+        get_leaderboard_df(session)
+        .filter(F.upper(F.col("WALLET_ADDRESS")) == F.lit(wallet_address.upper()))
+        .sort(F.when(F.upper(F.col("DEED_TYPE")) == F.lit("USER_CREATED"), F.lit(0)).otherwise(F.lit(1)))
+        .select("USERNAME", "IMAGE_HASH")
+        .limit(1)
+        .collect()
+    )
+    if not rows:
+        return None
+    return {
+        "username": str(rows[0]["USERNAME"]).strip() if rows[0]["USERNAME"] else None,
+        "image_hash": str(rows[0]["IMAGE_HASH"]).strip() if rows[0]["IMAGE_HASH"] else None,
+    }
 
 
 def wallet_has_profile_row(session: Session, wallet_address: str) -> bool:
@@ -1050,28 +1078,19 @@ def complete_manual_login(wallet_address: str, username: str) -> None:
         session = create_snowflake_session()
         existing_usernames = get_existing_usernames(session)
         normalized_username = username.upper()
-        existing_wallet_username = get_username_by_wallet_address(session, wallet_address)
-
-        if existing_wallet_username and existing_wallet_username.upper() != normalized_username:
-            st.error(
-                f"This wallet is already linked to username '{existing_wallet_username}'. "
-                "Please use that username."
-            )
-            return
-        if not existing_wallet_username and normalized_username in existing_usernames:
+        if normalized_username in existing_usernames:
             st.warning("Username already taken.")
             suggestions = generate_username_suggestions(username, wallet_address, existing_usernames)
             if suggestions:
                 st.info("Try one of these available usernames: " + ", ".join(suggestions))
             return
-        if not existing_wallet_username:
-            create_user_entry(session, username, wallet_address)
 
+        create_user_entry(session, username, wallet_address)
         st.session_state.wallet_address = wallet_address
-        st.session_state.username = existing_wallet_username or username
+        st.session_state.username = username
         st.session_state.profile_image_ref = get_wallet_profile_image_hash(session, wallet_address)
         st.session_state.profile_image_preview = None
-        st.session_state.user_xp = get_user_total_points(session, st.session_state.username)
+        st.session_state.user_xp = get_user_total_points(session, username)
         st.session_state.logged_in = True
         st.session_state.needs_username_registration = False
         st.session_state.wallet_lookup_complete = False
@@ -1131,11 +1150,12 @@ def login_page() -> None:
             else:
                 try:
                     session = create_snowflake_session()
-                    existing_wallet_username = get_username_by_wallet_address(session, submitted_wallet)
-                    if existing_wallet_username:
+                    guardian_profile = get_guardian_profile_by_wallet(session, submitted_wallet)
+                    if guardian_profile and guardian_profile.get("username"):
+                        existing_wallet_username = guardian_profile["username"] or "Guardian"
                         st.session_state.wallet_address = submitted_wallet
                         st.session_state.username = existing_wallet_username
-                        st.session_state.profile_image_ref = get_wallet_profile_image_hash(session, submitted_wallet)
+                        st.session_state.profile_image_ref = guardian_profile.get("image_hash")
                         st.session_state.profile_image_preview = None
                         st.session_state.user_xp = get_user_total_points(session, existing_wallet_username)
                         st.session_state.logged_in = True
@@ -1149,7 +1169,7 @@ def login_page() -> None:
                         st.session_state.wallet_lookup_complete = True
                         st.session_state.needs_username_registration = True
                 except Exception:
-                    st.error("We couldn't check your wallet in Snowflake right now. Please try again.")
+                    st.error("Database Connection Timeout. Please check your Snowflake secrets.")
 
         if st.session_state.wallet_lookup_complete and st.session_state.needs_username_registration:
             st.info("New wallet detected. Register your Guardian Name.")
@@ -1187,16 +1207,25 @@ def _profile_avatar_data_uri() -> str:
     profile_ref = (st.session_state.profile_image_ref or "").strip()
     if profile_ref.startswith("profile:sha256:"):
         return DEFAULT_PROFILE_AVATAR
+    if profile_ref.startswith("data:image/"):
+        return profile_ref
     return profile_ref or DEFAULT_PROFILE_AVATAR
 
 
 def render_profile_dashboard(session: Session) -> None:
     """Top-right circular profile icon and editable dashboard."""
     icon_src = _profile_avatar_data_uri()
-    st.markdown('<div class="profile-icon-wrap">', unsafe_allow_html=True)
-    with st.popover("🧑‍🌿", use_container_width=False):
+    st.markdown(
+        f"""
+        <div class="profile-icon-wrap">
+            <img src="{html.escape(icon_src)}" class="profile-corner-avatar" alt="guardian profile icon">
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    with st.expander("🧑‍🌿 Guardian Profile", expanded=False):
         st.markdown(
-            '<div class="profile-dashboard-shell"><h3>🌿 Guardian Dashboard</h3></div>',
+            '<div class="profile-dashboard-shell"><h3>🌿 Guardian Profile</h3></div>',
             unsafe_allow_html=True,
         )
         st.markdown(
@@ -1258,18 +1287,16 @@ def render_profile_dashboard(session: Session) -> None:
         )
         if profile_upload is not None and st.button("Save Profile Picture", key="save_profile_picture"):
             file_bytes = profile_upload.getvalue()
-            uploaded_hash = compute_image_hash(file_bytes)
-            profile_token = f"profile:sha256:{uploaded_hash}"
             mime = profile_upload.type or "image/png"
-            preview_uri = f"data:{mime};base64,{base64.b64encode(file_bytes).decode('utf-8')}"
+            profile_image_data_uri = f"data:{mime};base64,{base64.b64encode(file_bytes).decode('utf-8')}"
             update_wallet_profile(
                 session,
                 st.session_state.wallet_address or "",
-                profile_image_ref=profile_token,
+                profile_image_ref=profile_image_data_uri,
             )
-            st.session_state.profile_image_ref = profile_token
-            st.session_state.profile_image_preview = preview_uri
-            st.success("Profile picture hash synced to Snowflake.")
+            st.session_state.profile_image_ref = profile_image_data_uri
+            st.session_state.profile_image_preview = profile_image_data_uri
+            st.success("Profile picture synced to Snowflake.")
             st.rerun()
 
         if st.button("🚪 Logout", use_container_width=True, key="profile_logout"):
@@ -1280,9 +1307,6 @@ def render_profile_dashboard(session: Session) -> None:
             st.session_state.profile_image_preview = None
             st.session_state.profile_edit_mode = False
             st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
 def dashboard_page() -> None:
     """Render the main dashboard after login."""
     session = create_snowflake_session()
