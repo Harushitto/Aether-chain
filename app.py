@@ -541,11 +541,18 @@ def dashboard_page():
         st.info("📊 Leaderboard is being initialized. Check back soon!")
 
 # ============================================================================
-# 8. MAIN APP FLOW
+# 8. MAIN EXECUTION
 # ============================================================================
-configure_gemini()
+def main():
+    # 1. Start the AI
+    configure_gemini()
+    
+    # 2. Route the user based on login status
+    if not st.session_state.logged_in:
+        login_page()
+    else:
+        dashboard_page()
 
-if not st.session_state.logged_in:
-    login_page()
-else:
-    dashboard_page()
+if __name__ == "__main__":
+    main()
+    
