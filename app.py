@@ -262,7 +262,7 @@ def configure_gemini():
 def generate_daily_wisdom() -> str:
     """Generate a daily climate wisdom quote using Gemini."""
     try:
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        model = genai.GenerativeModel("models/gemini-1.5-flash")
         response = model.generate_content(
             "Generate a powerful, inspirational quote about saving Earth, nature, or greenery. "
             "Keep it to exactly 15 words maximum. Reply with ONLY the quote, no extra text."
@@ -277,7 +277,7 @@ def verify_deed_with_gemini(image: Image.Image, action_context: str) -> tuple[bo
     Returns: (is_verified: bool, points: int, analysis: str)
     """
     try:
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        model = genai.GenerativeModel("models/gemini-1.5-flash")
         prompt = f"""
         Analyze this image in the context of the described environmental action: "{action_context}"
         
