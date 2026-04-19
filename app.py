@@ -277,7 +277,7 @@ def verify_deed_with_gemini(image: Image.Image, action_context: str) -> tuple[bo
     Returns: (is_verified: bool, points: int, analysis: str)
     """
     try:
-        model = genai.GenerativeModel("gemini-2.5-pro")
+        model = genai.GenerativeModel("gemini-1.5-flash")
         prompt = f"""
         Analyze this image in the context of the described environmental action: "{action_context}"
         
