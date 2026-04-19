@@ -211,6 +211,18 @@ st.markdown(
         backdrop-filter: blur(3px);
     }
 
+    .botanical-step h2,
+    .botanical-step h3,
+    .botanical-step p,
+    .botanical-step strong {
+        color: #d9ffe8;
+        text-shadow: 0 0 10px rgba(45, 185, 104, 0.55), 0 0 18px rgba(26, 143, 79, 0.35);
+    }
+
+    .login-header-card {
+        margin-bottom: 12px;
+    }
+
     .quote-banner {
         margin: 10px 0 20px;
         padding: 12px 16px;
@@ -830,9 +842,17 @@ def login_page() -> None:
             unsafe_allow_html=True,
         )
 
+        st.markdown(
+            """
+            <div class="card-container step-card botanical-step login-header-card">
+                <h3>Welcome, Guardian!</h3>
+                <p>Your journey to a greener planet starts here. Every verified deed earns XP and builds your legacy on the Aether-Chain.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
         st.markdown('<div class="card-container">', unsafe_allow_html=True)
-        st.markdown("### Welcome, Guardian!")
-        st.markdown("Join the global movement to verify and celebrate environmental deeds.")
 
         username = st.text_input(
             "👤 Guardian Name",
@@ -902,7 +922,35 @@ def dashboard_page() -> None:
     """,
         unsafe_allow_html=True,
     )
-    st.markdown(f"### 👋 Welcome, **{st.session_state.username}**!")
+    mission_text = "Mission: Reach Earth Legend status by verifying more deeds!"
+    try:
+        preview_points = get_user_total_points(session, st.session_state.username)
+        if get_guardian_title(preview_points) == "Earth Legend":
+            mission_text = "Mission: Maintain Earth Legend status by mentoring and inspiring fellow Guardians!"
+    except Exception:
+        pass
+
+    welcome_col, tip_col = st.columns(2)
+    with welcome_col:
+        st.markdown(
+            f"""
+            <div class="card-container step-card botanical-step">
+                <h3>👋 Welcome, <strong>{html.escape(str(st.session_state.username))}</strong>!</h3>
+                <p><strong>Current Mission:</strong> {mission_text}</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with tip_col:
+        st.markdown(
+            """
+            <div class="card-container step-card botanical-step">
+                <h3>🌿 Pro-Tip</h3>
+                <p>Did you know? Trees planted in urban areas can reduce local temperatures by up to 8°C!</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     deed_alert_placeholder = st.empty()
     if st.session_state.deed_alert_text:
