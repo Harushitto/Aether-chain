@@ -523,7 +523,7 @@ def derive_guardian_name(wallet_address: str) -> str:
 
 
 def phantom_wallet_component() -> dict:
-    """Render a small JS component that connects to Phantom and returns wallet metadata."""
+    """Render wallet bridge with retry detection + connect state sync."""
     return components.html(
         """
         <div id="phantom-wallet-root">
@@ -539,32 +539,92 @@ def phantom_wallet_component() -> dict:
                 box-shadow: 0 4px 15px rgba(45, 185, 104, 0.3);
                 cursor: pointer;
             ">🔌 Connect Wallet</button>
-            <div id="phantom-status" style="margin-top: 10px; color: #bfffd7; font-size: 0.9rem;"></div>
+            <div id="phantom-status" style="margin-top: 10px; color: #bfffd7; font-size: 0.9rem;">Checking wallet extension…</div>
         </div>
 
         <script src="https://unpkg.com/streamlit-component-lib@1.4.0/dist/index.js"></script>
         <script>
             const statusEl = document.getElementById('phantom-status');
             const connectButton = document.getElementById('phantom-connect');
+            let pollIntervalId = null;
+            let pollAttempts = 0;
+            const maxAttempts = 10; // 10 * 500ms = 5 seconds
 
             function sendPayload(payload) {
+                window.parent.postMessage({ type: "AETHER_PHANTOM_STATE", payload }, "*");
                 if (window.Streamlit && window.Streamlit.setComponentValue) {
                     window.Streamlit.setComponentValue(payload);
                 }
             }
 
+            function getProvider() {
+                return (
+                    window.solana ||
+                    (window.parent && window.parent.solana) ||
+                    (window.top && window.top.solana) ||
+                    null
+                );
+            }
+
             function walletAvailable() {
-                return window.solana && window.solana.isPhantom;
+                const provider = getProvider();
+                return !!(provider && provider.isPhantom);
+            }
+
+            function setConnectLoading(isLoading) {
+                connectButton.disabled = isLoading;
+                connectButton.textContent = isLoading ? '⏳ Loading...' : '🔌 Connect Wallet';
+                connectButton.style.opacity = isLoading ? '0.75' : '1.0';
             }
 
             function refreshStatus() {
                 if (walletAvailable()) {
-                    statusEl.textContent = 'Phantom Wallet detected.';
-                    sendPayload({ connected: false, wallet_found: true, wallet_address: null, error: null });
+                    statusEl.textContent = '✅ Wallet Ready.';
+                    sendPayload({
+                        connected: false,
+                        wallet_ready: true,
+                        wallet_found: true,
+                        wallet_address: null,
+                        error: null,
+                        connect_in_progress: false
+                    });
                 } else {
-                    statusEl.textContent = 'Phantom Wallet not detected. Please install the extension.';
-                    sendPayload({ connected: false, wallet_found: false, wallet_address: null, error: 'Phantom Wallet not detected. Please install the extension.' });
+                    statusEl.textContent = '⏳ Waiting for Phantom extension...';
+                    sendPayload({
+                        connected: false,
+                        wallet_ready: false,
+                        wallet_found: false,
+                        wallet_address: null,
+                        error: null,
+                        connect_in_progress: false
+                    });
                 }
+            }
+
+            function startWalletPolling() {
+                refreshStatus();
+                if (walletAvailable()) {
+                    return;
+                }
+                pollIntervalId = window.setInterval(() => {
+                    pollAttempts += 1;
+                    refreshStatus();
+                    if (walletAvailable() || pollAttempts >= maxAttempts) {
+                        window.clearInterval(pollIntervalId);
+                        pollIntervalId = null;
+                        if (!walletAvailable()) {
+                            statusEl.textContent = '❌ Phantom Wallet not detected. Please install/enable the extension.';
+                            sendPayload({
+                                connected: false,
+                                wallet_ready: false,
+                                wallet_found: false,
+                                wallet_address: null,
+                                error: 'Phantom Wallet not detected. Please install/enable the extension.',
+                                connect_in_progress: false
+                            });
+                        }
+                    }
+                }, 500);
             }
 
             connectButton.addEventListener('click', async () => {
@@ -574,28 +634,50 @@ def phantom_wallet_component() -> dict:
                 }
 
                 try {
-                    const response = await window.solana.connect();
+                    const provider = getProvider();
+                    setConnectLoading(true);
+                    statusEl.textContent = 'Waiting for Phantom approval...';
+                    sendPayload({
+                        connected: false,
+                        wallet_ready: true,
+                        wallet_found: true,
+                        wallet_address: null,
+                        error: null,
+                        connect_in_progress: true
+                    });
+                    const response = await provider.connect();
                     const publicKey = response.publicKey.toString();
                     statusEl.textContent = `Connected: ${publicKey.slice(0, 4)}...${publicKey.slice(-3)}`;
-                    sendPayload({ connected: true, wallet_found: true, wallet_address: publicKey, error: null });
+                    sendPayload({
+                        connected: true,
+                        wallet_ready: true,
+                        wallet_found: true,
+                        wallet_address: publicKey,
+                        error: null,
+                        connect_in_progress: false
+                    });
                 } catch (err) {
                     sendPayload({
                         connected: false,
+                        wallet_ready: walletAvailable(),
                         wallet_found: true,
                         wallet_address: null,
-                        error: err && err.message ? err.message : 'Wallet connection failed.'
+                        error: err && err.message ? err.message : 'Wallet connection failed.',
+                        connect_in_progress: false
                     });
                     statusEl.textContent = 'Wallet connection cancelled or failed.';
+                } finally {
+                    setConnectLoading(false);
                 }
             });
 
-            refreshStatus();
+            startWalletPolling();
             if (window.Streamlit && window.Streamlit.setFrameHeight) {
                 window.Streamlit.setFrameHeight(110);
             }
         </script>
         """,
-        height=120,
+        height=130,
     )
 
 
@@ -693,6 +775,16 @@ def create_user_entry(session: Session, username: str, wallet_address: str) -> N
     )
     row_df = row_df.with_column("CREATED_AT", F.current_timestamp())
     row_df.write.mode("append").save_as_table(LEADERBOARD_TABLE)
+
+
+def wallet_address_exists(session: Session, wallet_address: str) -> bool:
+    """Check if wallet address has already been recorded."""
+    count = (
+        get_leaderboard_df(session)
+        .filter(F.upper(F.col("WALLET_ADDRESS")) == F.lit(wallet_address.upper()))
+        .count()
+    )
+    return count > 0
 
 
 def get_user_total_points(session: Session, username: str) -> int:
@@ -945,6 +1037,14 @@ if "submitted_upload_keys" not in st.session_state:
     st.session_state.submitted_upload_keys = set()
 if "production_reset_done" not in st.session_state:
     st.session_state.production_reset_done = False
+if "production_reset_attempted" not in st.session_state:
+    st.session_state.production_reset_attempted = False
+if "wallet_ready" not in st.session_state:
+    st.session_state.wallet_ready = False
+if "wallet_connect_in_progress" not in st.session_state:
+    st.session_state.wallet_connect_in_progress = False
+if "user_xp" not in st.session_state:
+    st.session_state.user_xp = 0
 
 
 # ============================================================================
@@ -987,10 +1087,28 @@ def login_page() -> None:
             payload_wallet = (wallet_payload.get("wallet_address") or "").strip()
             payload_error = wallet_payload.get("error")
             wallet_found = wallet_payload.get("wallet_found")
+            wallet_ready = bool(wallet_payload.get("wallet_ready"))
+            connect_in_progress = bool(wallet_payload.get("connect_in_progress"))
+            st.session_state.wallet_ready = wallet_ready
+            st.session_state.wallet_connect_in_progress = connect_in_progress
 
             if payload_wallet and SOLANA_WALLET_PATTERN.fullmatch(payload_wallet):
+                guardian_name = derive_guardian_name(payload_wallet)
                 st.session_state.wallet_address = payload_wallet
-                st.session_state.username = derive_guardian_name(payload_wallet)
+                st.session_state.username = guardian_name
+                try:
+                    session = create_snowflake_session()
+                    if not wallet_address_exists(session, payload_wallet):
+                        create_user_entry(session, guardian_name, payload_wallet)
+                    st.session_state.user_xp = get_user_total_points(session, guardian_name)
+                    st.session_state.logged_in = True
+                    st.session_state.daily_wisdom = generate_daily_wisdom()
+                    st.rerun()
+                except Exception as e:
+                    st.error(
+                        "Wallet connected, but login failed while syncing Snowflake. "
+                        f"Details: {e}"
+                    )
             elif payload_error:
                 if str(payload_error).strip() == "Phantom Wallet not detected. Please install the extension.":
                     st.warning("Phantom Wallet not detected. Please install the extension.")
@@ -1006,23 +1124,14 @@ def login_page() -> None:
             st.session_state.username = guardian_name
             st.success(f"Connected Wallet: {shorten_wallet_address(wallet_address)}")
             st.caption(f"Guardian Name is auto-derived: {guardian_name}")
-
-            if st.button("Enter Aether-Chain", type="primary", use_container_width=True):
-                try:
-                    session = create_snowflake_session()
-                    create_user_entry(session, guardian_name, wallet_address)
-                    st.session_state.logged_in = True
-                    st.session_state.username = guardian_name
-                    st.session_state.wallet_address = wallet_address
-                    st.session_state.daily_wisdom = generate_daily_wisdom()
-                    st.rerun()
-                except Exception as e:
-                    st.error(
-                        "Login failed while connecting to Snowflake. "
-                        f"Details: {e}"
-                    )
+            st.info("Finalizing login…")
         else:
-            st.info("Connect your Phantom wallet to continue.")
+            if st.session_state.wallet_connect_in_progress:
+                st.info("Loading... approve the Phantom popup to continue.")
+            elif st.session_state.wallet_ready:
+                st.success("Wallet Ready. Click Connect Wallet to proceed.")
+            else:
+                st.info("Connect your Phantom wallet to continue.")
 
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1409,7 +1518,11 @@ def dashboard_page() -> None:
 def main() -> None:
     configure_gemini()
 
-    if st.secrets.get("RESET_ENVIRONMENT_ON_BOOT") and not st.session_state.get("production_reset_done"):
+    if (
+        st.secrets.get("RESET_ENVIRONMENT_ON_BOOT")
+        and not st.session_state.get("production_reset_attempted")
+    ):
+        st.session_state.production_reset_attempted = True
         try:
             reset_environment_for_production(create_snowflake_session())
             st.session_state.production_reset_done = True
