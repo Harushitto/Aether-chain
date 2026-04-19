@@ -343,7 +343,7 @@ def login_page():
             key="login_wallet"
         )
         
-        if st.button("🚀 Enter Aether-Chain", type="primary", use_container_width=True):
+        if st.button("Enter Aether-Chain", type="primary", use_container_width=True):
             if username and wallet_address:
                 try:
                     session = create_snowflake_session()
@@ -386,13 +386,13 @@ def dashboard_page():
     # ========================================================================
     # DAILY CLIMATE WISDOM TICKER
     # ========================================================================
-        # === DAILY CLIMATE WISDOM TICKER (Updated) ===
+        # === DAILY CLIMATE WISDOM === #
     if st.session_state.daily_wisdom:
         wisdom_text = st.session_state.daily_wisdom
     else:
         wisdom_text = "🌱 Welcome, Guardian! Upload your first green deed to start your journey."
 
-        st.markdown(f"""
+    st.markdown(f"""
         <div class="ticker-container">
             <div class="marquee-text">
                 💡 <strong>Aether-Chain Update:</strong> {wisdom_text}
