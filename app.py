@@ -368,15 +368,19 @@ def dashboard_page():
     # ========================================================================
     # DAILY CLIMATE WISDOM TICKER
     # ========================================================================
+        # === DAILY CLIMATE WISDOM TICKER (Updated) ===
     if st.session_state.daily_wisdom:
-        st.markdown(f"""
+        wisdom_text = st.session_state.daily_wisdom
+    else:
+        wisdom_text = "🌱 Welcome, Guardian! Upload your first green deed to start your journey."
+
+    st.markdown(f"""
         <div class="ticker-container">
-            💡 <strong>Daily Climate Wisdom:</strong><br>
-            "{st.session_state.daily_wisdom}"
+            💡 <strong>Aether-Chain Update:</strong><br>
+            "{wisdom_text}"
         </div>
-        """, unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
     
-    st.markdown("---")
     
     # ========================================================================
     # ACTION SUBMISSION SECTION
