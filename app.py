@@ -1,6 +1,7 @@
 import re
 import hashlib
 import html
+import random
 import time
 import textwrap
 from typing import Optional
@@ -8,7 +9,6 @@ from typing import Optional
 import google.generativeai as genai
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 from PIL import Image
 from snowflake.snowpark import Session
 from snowflake.snowpark import functions as F
@@ -524,171 +524,6 @@ def shorten_wallet_address(wallet_address: str) -> str:
     return f"{cleaned[:4]}...{cleaned[-3:]}"
 
 
-def derive_guardian_name(wallet_address: str) -> str:
-    """Build deterministic Guardian username directly from wallet."""
-    short_wallet = shorten_wallet_address(wallet_address)
-    return f"Guardian_{short_wallet}"
-
-
-def phantom_wallet_component() -> dict:
-    """Render wallet bridge with retry detection + connect state sync."""
-    return components.html(
-        """
-        <div id="phantom-wallet-root">
-            <button id="phantom-connect" style="
-                width: 100%;
-                background: linear-gradient(135deg, #2db968 0%, #1a8f4f 100%);
-                color: #ffffff;
-                border: none;
-                border-radius: 12px;
-                padding: 12px 24px;
-                font-weight: 600;
-                font-size: 1rem;
-                box-shadow: 0 4px 15px rgba(45, 185, 104, 0.3);
-                cursor: pointer;
-            ">🔌 Connect Wallet</button>
-            <div id="phantom-status" style="margin-top: 10px; color: #bfffd7; font-size: 0.9rem;">Checking wallet extension…</div>
-        </div>
-
-        <script src="https://unpkg.com/streamlit-component-lib@1.4.0/dist/index.js"></script>
-        <script>
-            const statusEl = document.getElementById('phantom-status');
-            const connectButton = document.getElementById('phantom-connect');
-            let pollIntervalId = null;
-            let pollAttempts = 0;
-            const maxAttempts = 10; // 10 * 500ms = 5 seconds
-
-            function sendPayload(payload) {
-                window.parent.postMessage({ type: "AETHER_PHANTOM_STATE", payload }, "*");
-                if (window.Streamlit && window.Streamlit.setComponentValue) {
-                    window.Streamlit.setComponentValue(payload);
-                }
-            }
-
-            function getProvider() {
-                return (
-                    window.solana ||
-                    (window.parent && window.parent.solana) ||
-                    (window.top && window.top.solana) ||
-                    null
-                );
-            }
-
-            function walletAvailable() {
-                const provider = getProvider();
-                return !!(provider && provider.isPhantom);
-            }
-
-            function setConnectLoading(isLoading) {
-                connectButton.disabled = isLoading;
-                connectButton.textContent = isLoading ? '⏳ Loading...' : '🔌 Connect Wallet';
-                connectButton.style.opacity = isLoading ? '0.75' : '1.0';
-            }
-
-            function refreshStatus() {
-                if (walletAvailable()) {
-                    statusEl.textContent = '✅ Wallet Ready.';
-                    sendPayload({
-                        connected: false,
-                        wallet_ready: true,
-                        wallet_found: true,
-                        wallet_address: null,
-                        error: null,
-                        connect_in_progress: false
-                    });
-                } else {
-                    statusEl.textContent = '⏳ Waiting for Phantom extension...';
-                    sendPayload({
-                        connected: false,
-                        wallet_ready: false,
-                        wallet_found: false,
-                        wallet_address: null,
-                        error: null,
-                        connect_in_progress: false
-                    });
-                }
-            }
-
-            function startWalletPolling() {
-                refreshStatus();
-                if (walletAvailable()) {
-                    return;
-                }
-                pollIntervalId = window.setInterval(() => {
-                    pollAttempts += 1;
-                    refreshStatus();
-                    if (walletAvailable() || pollAttempts >= maxAttempts) {
-                        window.clearInterval(pollIntervalId);
-                        pollIntervalId = null;
-                        if (!walletAvailable()) {
-                            statusEl.textContent = '❌ Phantom Wallet not detected. Please install/enable the extension.';
-                            sendPayload({
-                                connected: false,
-                                wallet_ready: false,
-                                wallet_found: false,
-                                wallet_address: null,
-                                error: 'Phantom Wallet not detected. Please install/enable the extension.',
-                                connect_in_progress: false
-                            });
-                        }
-                    }
-                }, 500);
-            }
-
-            connectButton.addEventListener('click', async () => {
-                if (!walletAvailable()) {
-                    refreshStatus();
-                    return;
-                }
-
-                try {
-                    const provider = getProvider();
-                    setConnectLoading(true);
-                    statusEl.textContent = 'Waiting for Phantom approval...';
-                    sendPayload({
-                        connected: false,
-                        wallet_ready: true,
-                        wallet_found: true,
-                        wallet_address: null,
-                        error: null,
-                        connect_in_progress: true
-                    });
-                    const response = await provider.connect();
-                    const publicKey = response.publicKey.toString();
-                    statusEl.textContent = `Connected: ${publicKey.slice(0, 4)}...${publicKey.slice(-3)}`;
-                    sendPayload({
-                        connected: true,
-                        wallet_ready: true,
-                        wallet_found: true,
-                        wallet_address: publicKey,
-                        error: null,
-                        connect_in_progress: false
-                    });
-                } catch (err) {
-                    sendPayload({
-                        connected: false,
-                        wallet_ready: walletAvailable(),
-                        wallet_found: true,
-                        wallet_address: null,
-                        error: err && err.message ? err.message : 'Wallet connection failed.',
-                        connect_in_progress: false
-                    });
-                    statusEl.textContent = 'Wallet connection cancelled or failed.';
-                } finally {
-                    setConnectLoading(false);
-                }
-            });
-
-            startWalletPolling();
-            if (window.Streamlit && window.Streamlit.setFrameHeight) {
-                window.Streamlit.setFrameHeight(110);
-            }
-        </script>
-        """,
-        height=130,
-    )
-
-
 def normalize_action_context(action_context: str) -> str:
     """Fix common spelling mistakes in deed descriptions."""
     normalized = action_context
@@ -734,16 +569,16 @@ def _sql_literal(value: Optional[object]) -> str:
 
 
 def insert_leaderboard_row(session: Session, row_payload: dict[str, Optional[object]]) -> None:
-    """Insert leaderboard data with explicit columns to avoid schema/value mismatches."""
-    available_columns = get_leaderboard_columns(session)
-    insert_columns = [
-        col for col in LEADERBOARD_INSERT_SCHEMA if col in available_columns and col in row_payload
-    ]
-    if not insert_columns:
-        raise RuntimeError("No matching leaderboard columns were found for insert.")
+    """Insert exactly the 6 expected non-generated columns into the leaderboard table."""
+    required_columns = LEADERBOARD_INSERT_SCHEMA
+    missing_from_payload = [col for col in required_columns if col not in row_payload]
+    if missing_from_payload:
+        raise RuntimeError(
+            f"Insert payload missing required columns: {', '.join(missing_from_payload)}"
+        )
 
-    values_sql = ", ".join(_sql_literal(row_payload[col]) for col in insert_columns)
-    columns_sql = ", ".join(insert_columns)
+    values_sql = ", ".join(_sql_literal(row_payload[col]) for col in required_columns)
+    columns_sql = ", ".join(required_columns)
     session.sql(
         f"INSERT INTO {LEADERBOARD_TABLE} ({columns_sql}) VALUES ({values_sql})"
     ).collect()
@@ -757,6 +592,60 @@ def user_exists(session: Session, username: str) -> bool:
         .count()
     )
     return count > 0
+
+
+def get_existing_usernames(session: Session) -> set[str]:
+    """Load existing usernames from Snowflake for collision checks."""
+    usernames = (
+        get_leaderboard_df(session)
+        .select("USERNAME")
+        .to_pandas()["USERNAME"]
+        .dropna()
+        .astype(str)
+        .tolist()
+    )
+    return {name.strip().upper() for name in usernames if str(name).strip()}
+
+
+def get_username_by_wallet_address(session: Session, wallet_address: str) -> Optional[str]:
+    """Return the existing username for a wallet, if present."""
+    rows = (
+        get_leaderboard_df(session)
+        .filter(F.upper(F.col("WALLET_ADDRESS")) == F.lit(wallet_address.upper()))
+        .select("USERNAME")
+        .limit(1)
+        .collect()
+    )
+    if not rows:
+        return None
+    return str(rows[0]["USERNAME"]).strip() if rows[0]["USERNAME"] else None
+
+
+def generate_username_suggestions(
+    chosen_name: str,
+    wallet_address: str,
+    existing_usernames: set[str],
+    total: int = 3,
+) -> list[str]:
+    """Generate unique username suggestions that are not already taken."""
+    suggestions: list[str] = []
+    base = chosen_name.strip()
+    wallet_suffix = (wallet_address or "").strip()[-4:]
+    candidate_pool = [f"{base}_{wallet_suffix}"] if wallet_suffix else []
+
+    while len(candidate_pool) < 50:
+        candidate_pool.append(f"{base}_{random.randint(100, 999)}")
+
+    seen = set()
+    for candidate in candidate_pool:
+        normalized = candidate.upper()
+        if normalized in existing_usernames or normalized in seen:
+            continue
+        suggestions.append(candidate)
+        seen.add(normalized)
+        if len(suggestions) == total:
+            break
+    return suggestions
 
 
 def create_user_entry(session: Session, username: str, wallet_address: str) -> None:
@@ -778,16 +667,6 @@ def create_user_entry(session: Session, username: str, wallet_address: str) -> N
         )
     except Exception as exc:
         raise RuntimeError("Unable to sync your profile to Snowflake right now.") from exc
-
-
-def wallet_address_exists(session: Session, wallet_address: str) -> bool:
-    """Check if wallet address has already been recorded."""
-    count = (
-        get_leaderboard_df(session)
-        .filter(F.upper(F.col("WALLET_ADDRESS")) == F.lit(wallet_address.upper()))
-        .count()
-    )
-    return count > 0
 
 
 def get_user_total_points(session: Session, username: str) -> int:
@@ -1041,10 +920,6 @@ if "last_award_time" not in st.session_state:
     st.session_state.last_award_time = 0.0
 if "submitted_upload_keys" not in st.session_state:
     st.session_state.submitted_upload_keys = set()
-if "wallet_ready" not in st.session_state:
-    st.session_state.wallet_ready = False
-if "wallet_connect_in_progress" not in st.session_state:
-    st.session_state.wallet_connect_in_progress = False
 if "user_xp" not in st.session_state:
     st.session_state.user_xp = 0
 
@@ -1052,22 +927,39 @@ if "user_xp" not in st.session_state:
 # ============================================================================
 # 7. LOGIN PAGE
 # ============================================================================
-def complete_wallet_login(wallet_address: str) -> None:
-    """Complete wallet login flow and synchronize user metadata."""
+def complete_manual_login(wallet_address: str, username: str) -> None:
+    """Complete manual login flow after wallet + username validation."""
     wallet_address = wallet_address.strip()
+    username = username.strip()
+
     if not SOLANA_WALLET_PATTERN.fullmatch(wallet_address):
         st.error("Invalid Solana wallet address. Please verify and try again.")
         return
 
-    guardian_name = derive_guardian_name(wallet_address)
-
     try:
         session = create_snowflake_session()
-        if not wallet_address_exists(session, wallet_address):
-            create_user_entry(session, guardian_name, wallet_address)
+        existing_usernames = get_existing_usernames(session)
+        normalized_username = username.upper()
+        existing_wallet_username = get_username_by_wallet_address(session, wallet_address)
+
+        if existing_wallet_username and existing_wallet_username.upper() != normalized_username:
+            st.error(
+                f"This wallet is already linked to username '{existing_wallet_username}'. "
+                "Please use that username."
+            )
+            return
+        if not existing_wallet_username and normalized_username in existing_usernames:
+            st.warning("Username already taken.")
+            suggestions = generate_username_suggestions(username, wallet_address, existing_usernames)
+            if suggestions:
+                st.info("Try one of these available usernames: " + ", ".join(suggestions))
+            return
+        if not existing_wallet_username:
+            create_user_entry(session, username, wallet_address)
+
         st.session_state.wallet_address = wallet_address
-        st.session_state.username = guardian_name
-        st.session_state.user_xp = get_user_total_points(session, guardian_name)
+        st.session_state.username = existing_wallet_username or username
+        st.session_state.user_xp = get_user_total_points(session, st.session_state.username)
         st.session_state.logged_in = True
         st.session_state.daily_wisdom = generate_daily_wisdom()
         st.rerun()
@@ -1079,7 +971,7 @@ def complete_wallet_login(wallet_address: str) -> None:
 
 
 def login_page() -> None:
-    """Render the wallet-first authentication page."""
+    """Render the manual-first authentication page."""
     col1, col2, col3 = st.columns([1, 2, 1])
 
     with col2:
@@ -1100,73 +992,47 @@ def login_page() -> None:
             """
             <div class="card-container step-card botanical-step login-header-card">
                 <h3>Welcome, Guardian!</h3>
-                <p>Connect Phantom to begin. Your Solana wallet is your single source of identity.</p>
+                <p>Enter your Wallet ID and choose a unique username to begin your journey.</p>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
         st.markdown('<div class="card-container">', unsafe_allow_html=True)
-        st.markdown("#### 🔐 Connect Phantom Wallet")
+        st.markdown("#### 🔐 Manual Identification")
 
-        wallet_payload = phantom_wallet_component()
-        phantom_wallet_connected = False
+        manual_wallet_input = st.text_input(
+            "Wallet ID",
+            key="manual_wallet_input",
+            placeholder="e.g. 9xQeWvG816bUx9EPfPy...",
+        )
+        manual_username_input = st.text_input(
+            "Username",
+            key="manual_username_input",
+            placeholder="Choose a unique username",
+        )
+        manual_submit = st.button("Continue", use_container_width=True)
 
-        if isinstance(wallet_payload, dict):
-            payload_wallet = (wallet_payload.get("wallet_address") or "").strip()
-            payload_error = wallet_payload.get("error")
-            wallet_found = wallet_payload.get("wallet_found")
-            wallet_ready = bool(wallet_payload.get("wallet_ready"))
-            connect_in_progress = bool(wallet_payload.get("connect_in_progress"))
-            st.session_state.wallet_ready = wallet_ready
-            st.session_state.wallet_connect_in_progress = connect_in_progress
-
-            if payload_wallet and SOLANA_WALLET_PATTERN.fullmatch(payload_wallet):
-                phantom_wallet_connected = True
-                complete_wallet_login(payload_wallet)
-            elif payload_error:
-                if str(payload_error).strip() == "Phantom Wallet not detected. Please install the extension.":
-                    st.warning("Phantom Wallet not detected. Please install the extension.")
-                else:
-                    st.info(f"Wallet status: {payload_error}")
-            elif wallet_found is False:
-                st.warning("Phantom Wallet not detected. Please install the extension.")
-
-        with st.expander("Or use Manual Wallet Entry", expanded=False):
-            st.caption("Use this fallback if Phantom extension is unavailable.")
-            manual_wallet_input = st.text_input(
-                "Enter Solana wallet address",
-                key="manual_wallet_input",
-                placeholder="e.g. 9xQeWvG816bUx9EPfPy...",
-            )
-            manual_submit = st.button("Continue with Manual Entry", use_container_width=True)
-
-            if manual_submit:
-                submitted_wallet = manual_wallet_input.strip()
-                if not submitted_wallet:
-                    st.error("Please enter a wallet address before submitting.")
-                elif not SOLANA_WALLET_PATTERN.fullmatch(submitted_wallet):
-                    st.error("Invalid Solana Address Format")
-                elif phantom_wallet_connected:
-                    st.info("Phantom wallet connection detected and prioritized over manual entry.")
-                else:
-                    complete_wallet_login(submitted_wallet)
+        if manual_submit:
+            submitted_wallet = manual_wallet_input.strip()
+            submitted_username = manual_username_input.strip()
+            if not submitted_wallet:
+                st.error("Please enter your Wallet ID before submitting.")
+            elif not SOLANA_WALLET_PATTERN.fullmatch(submitted_wallet):
+                st.error("Invalid Solana Wallet ID format.")
+            elif not submitted_username:
+                st.error("Please enter a Username before submitting.")
+            else:
+                complete_manual_login(submitted_wallet, submitted_username)
 
         wallet_address = (st.session_state.wallet_address or "").strip()
 
         if wallet_address:
-            guardian_name = derive_guardian_name(wallet_address)
-            st.session_state.username = guardian_name
             st.success(f"Connected Wallet: {shorten_wallet_address(wallet_address)}")
-            st.caption(f"Guardian Name is auto-derived: {guardian_name}")
+            st.caption(f"Username: {st.session_state.username}")
             st.info("Finalizing login…")
         else:
-            if st.session_state.wallet_connect_in_progress:
-                st.info("Loading... approve the Phantom popup to continue.")
-            elif st.session_state.wallet_ready:
-                st.success("Wallet Ready. Click Connect Wallet to proceed.")
-            else:
-                st.info("Connect your Phantom wallet to continue.")
+            st.info("Enter your wallet ID and a unique username to continue.")
 
         st.markdown("</div>", unsafe_allow_html=True)
 
