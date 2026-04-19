@@ -246,11 +246,11 @@ def get_user_total_points(session, username: str) -> int:
 
 def record_deed(session, username: str, wallet_address: str, action_context: str, points: int):
     """Record a verified deed to Snowflake."""
+    # Using triple quotes for cleaner SQL formatting
     session.sql(f"""
         INSERT INTO CLIMATE_LEADERBOARD (USERNAME, WALLET_ADDRESS, POINTS, DEED_TYPE, ACTION_CONTEXT, CREATED_AT) 
         VALUES ('{username}', '{wallet_address}', {points}, 'Verified Deed', '{action_context}', CURRENT_TIMESTAMP())
     """).collect()
-
 # ============================================================================
 # 4. AI UTILITIES
 # ============================================================================
