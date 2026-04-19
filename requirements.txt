@@ -1,3 +1,5 @@
 streamlit
 google-generativeai
-
+snowflake-snowpark-python
+Pillow
+pandas
