@@ -1,6 +1,7 @@
 import re
 import hashlib
 import html
+import time
 from typing import Optional
 
 import google.generativeai as genai
@@ -172,6 +173,12 @@ st.markdown(
         padding: 10px 0;
     }
 
+    .deed-ticker.deed-alert {
+        border: 1px solid rgba(115, 255, 170, 0.95);
+        background: linear-gradient(90deg, rgba(9, 36, 19, 0.92), rgba(20, 72, 39, 0.82));
+        box-shadow: 0 0 20px rgba(45, 185, 104, 0.65), inset 0 0 18px rgba(45, 185, 104, 0.28);
+    }
+
     .deed-ticker-track {
         display: inline-block;
         padding-left: 100%;
@@ -191,6 +198,41 @@ st.markdown(
         border: 1px solid rgba(45, 185, 104, 0.8) !important;
         box-shadow: 0 0 12px rgba(45, 185, 104, 0.18);
         padding: 18px !important;
+    }
+
+    .botanical-filler {
+        position: relative;
+        min-height: 120px;
+        border-radius: 14px;
+        border: 1px solid rgba(115, 255, 170, 0.35);
+        padding: 18px;
+        color: #d8ffe7;
+        overflow: hidden;
+        background-color: rgba(15, 48, 24, 0.8);
+        background-image:
+            linear-gradient(130deg, rgba(12, 42, 23, 0.92) 0%, rgba(21, 69, 38, 0.72) 100%),
+            url('https://www.transparenttextures.com/patterns/leaves.png');
+        background-size: cover, auto;
+        backdrop-filter: blur(2px);
+        box-shadow: inset 0 0 28px rgba(8, 22, 13, 0.55), 0 0 18px rgba(45, 185, 104, 0.2);
+    }
+
+    .botanical-filler::after {
+        content: "";
+        position: absolute;
+        right: -22px;
+        bottom: -16px;
+        width: 140px;
+        height: 80px;
+        opacity: 0.22;
+        background-repeat: no-repeat;
+        background-size: contain;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 280 160'%3E%3Cpath fill='%2376f1a6' d='M21 142c51-5 79-37 95-74 6-16 16-37 34-45-7 17-7 38-2 55 6 24 24 45 47 55-23 11-52 7-74-6-20-11-32-32-46-49-15 38-31 55-54 64z'/%3E%3Cpath fill='%234ee08a' d='M160 121c24-18 41-44 48-73 15 19 24 43 23 68-1 10-2 20-6 29-7-12-19-21-32-24-11-3-23-2-33 0z'/%3E%3C/svg%3E");
+        pointer-events: none;
+    }
+
+    .verify-button button {
+        animation: pulse-glow 1.9s ease-in-out infinite;
     }
 
     .nature-panel {
@@ -264,7 +306,11 @@ st.markdown(
 
     .success-modal {
         animation: modal-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
-        box-shadow: 0 0 16px rgba(45, 185, 104, 0.65), 0 0 32px rgba(26, 143, 79, 0.35);
+        border: 1px solid rgba(115, 255, 170, 0.95);
+        box-shadow:
+            0 0 20px rgba(45, 185, 104, 0.8),
+            0 0 40px rgba(45, 185, 104, 0.5),
+            inset 0 0 22px rgba(45, 185, 104, 0.28);
     }
 
     hr {
@@ -652,6 +698,14 @@ def login_page() -> None:
 def dashboard_page() -> None:
     """Render the main dashboard after login."""
     session = create_snowflake_session()
+    now_ts = time.time()
+    if (
+        st.session_state.deed_alert_text
+        and st.session_state.deed_alert_time
+        and (now_ts - st.session_state.deed_alert_time > 10)
+    ):
+        st.session_state.deed_alert_text = ""
+        st.session_state.deed_alert_time = 0.0
 
     col1, col2, col3 = st.columns([3, 1, 1])
     with col3:
@@ -670,6 +724,19 @@ def dashboard_page() -> None:
         unsafe_allow_html=True,
     )
     st.markdown(f"### 👋 Welcome, **{st.session_state.username}**!")
+
+    deed_alert_placeholder = st.empty()
+    if st.session_state.deed_alert_text:
+        deed_alert_placeholder.markdown(
+            f"""
+            <div class="deed-ticker deed-alert">
+                <div class="deed-ticker-track">✨ {st.session_state.deed_alert_text}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        deed_alert_placeholder.empty()
 
     wisdom_text = (
         st.session_state.daily_wisdom
@@ -728,6 +795,28 @@ def dashboard_page() -> None:
         )
         st.markdown("</div>", unsafe_allow_html=True)
 
+    filler_col1, filler_col2 = st.columns(2)
+    with filler_col1:
+        st.markdown(
+            """
+            <div class="botanical-filler">
+                <strong>🌿 Native Habitat Spotlight</strong><br><br>
+                Add details like species planted, cleanup location, or community impact for richer proof.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with filler_col2:
+        st.markdown(
+            """
+            <div class="botanical-filler">
+                <strong>🍃 Deed Quality Tip</strong><br><br>
+                Use clear daylight photos with your action visible so verification stays smooth and fair.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
     if action_context and uploaded_file:
         st.markdown('<div class="card-container">', unsafe_allow_html=True)
 
@@ -746,12 +835,14 @@ def dashboard_page() -> None:
         if st.session_state.last_processed_submission_key == submission_key:
             st.warning("⚠️ You have already submitted this specific upload in this session.")
 
+        st.markdown('<div class="verify-button">', unsafe_allow_html=True)
         verify_clicked = st.button(
             "✅ Verify & Claim Rewards",
             type="primary",
             use_container_width=True,
             disabled=st.session_state.last_processed_submission_key == submission_key,
         )
+        st.markdown("</div>", unsafe_allow_html=True)
         if verify_clicked:
             if not is_image:
                 st.warning("⚠️ Please upload a JPG or PNG image for AI verification.")
@@ -861,7 +952,7 @@ def dashboard_page() -> None:
 
     st.markdown("### 🏆 Global Leaderboard")
     try:
-        df = (
+        leaderboard_df = (
             get_leaderboard_df(session)
             .select(
                 F.upper(F.col("USERNAME")).alias("GUARDIAN"),
@@ -874,11 +965,24 @@ def dashboard_page() -> None:
             .to_pandas()
         )
 
-        if not df.empty:
-            df.columns = ["Guardian", "Total XP"]
-            df.insert(0, "Rank", range(1, len(df) + 1))
+        if not leaderboard_df.empty:
+            leaderboard_df = leaderboard_df.rename(
+                columns={"GUARDIAN": "Guardian", "TOTAL_XP": "Total XP"}
+            )
+            leaderboard_df["Total XP"] = (
+                pd.to_numeric(leaderboard_df["Total XP"], errors="coerce")
+                .fillna(0)
+                .astype(int)
+            )
+            leaderboard_df = leaderboard_df.sort_values(
+                by="Total XP",
+                ascending=False,
+                kind="stable",
+            ).reset_index(drop=True)
+            leaderboard_df.insert(0, "Rank", range(1, len(leaderboard_df) + 1))
+
             leaderboard_rows = []
-            for _, row in df.iterrows():
+            for _, row in leaderboard_df.iterrows():
                 rank = int(row["Rank"])
                 row_class = f"rank-{rank}" if rank <= 3 else ""
                 guardian = html.escape(str(row["Guardian"]))
