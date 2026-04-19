@@ -194,7 +194,11 @@ st.markdown(
 LEADERBOARD_TABLE = "CLIMATE_LEADERBOARD"
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_.\- ]{3,30}$")
 SOLANA_WALLET_PATTERN = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")
-GEMINI_CANDIDATE_MODELS = ["gemini-1.5-flash"]
+GEMINI_CANDIDATE_MODELS = [
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+]
 LEADERBOARD_SCHEMA = [
     "USERNAME",
     "WALLET_ADDRESS",
@@ -296,30 +300,48 @@ def configure_gemini() -> None:
     genai.configure(api_key=api_key)
 
 
+def _normalize_model_name(name: str) -> str:
+    """Normalize a Gemini model id by stripping optional `models/` prefix."""
+    return name.removeprefix("models/")
+
+
 def _get_supported_model() -> Optional[str]:
-    """Return a supported Gemini model id for generate_content."""
+    """Return the best available Gemini model id for generate_content."""
     try:
         configure_gemini()
-        available = {
+        available = [
             m.name
             for m in genai.list_models()
             if hasattr(m, "supported_generation_methods")
             and "generateContent" in m.supported_generation_methods
-        }
+        ]
+
+        if not available:
+            return None
+
+        normalized_map = {_normalize_model_name(name): name for name in available}
+
         for candidate in GEMINI_CANDIDATE_MODELS:
-            if candidate in available:
-                return candidate
-            if f"models/{candidate}" in available:
-                return candidate
+            if candidate in normalized_map:
+                return normalized_map[candidate]
+
+        # Fallback: prefer any flash model if configured candidates are unavailable.
+        for normalized_name, original_name in normalized_map.items():
+            if "flash" in normalized_name:
+                return original_name
+
+        # Last resort: use first available model with generateContent support.
+        return available[0]
     except Exception:
-        return GEMINI_CANDIDATE_MODELS[0]
-    return GEMINI_CANDIDATE_MODELS[0]
+        return None
 
 
 def generate_daily_wisdom() -> str:
     """Generate a daily climate wisdom quote using Gemini."""
     try:
         model_name = _get_supported_model()
+        if not model_name:
+            return "🌍 Every action counts. Plant hope, harvest change. 🌱"
         model = genai.GenerativeModel(model_name)
         response = model.generate_content(
             "Generate a powerful, inspirational quote about saving Earth, nature, or greenery. "
@@ -337,6 +359,12 @@ def verify_deed_with_gemini(image: Image.Image, action_context: str) -> tuple[bo
     """
     try:
         model_name = _get_supported_model()
+        if not model_name:
+            return (
+                False,
+                0,
+                "Error during verification: No Gemini model with generateContent support is available.",
+            )
         model = genai.GenerativeModel(model_name)
         prompt = f"""
         Analyze this image in the context of the described environmental action: "{action_context}".
