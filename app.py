@@ -1,5 +1,6 @@
 import re
 import hashlib
+import html
 from typing import Optional
 
 import google.generativeai as genai
@@ -82,6 +83,11 @@ st.markdown(
         transform: translateY(-2px);
     }
 
+    .stButton > button[kind="primary"]:hover {
+        box-shadow: 0 0 18px rgba(45, 185, 104, 0.95), 0 0 32px rgba(26, 143, 79, 0.7);
+        filter: brightness(1.08);
+    }
+
     .stTextInput > div > div > input,
     .stTextArea > div > div > textarea {
         background-color: #0f3018 !important;
@@ -154,11 +160,107 @@ st.markdown(
         width: 100%;
     }
 
+    .deed-ticker {
+        overflow: hidden;
+        white-space: nowrap;
+        width: 100%;
+        margin: 16px 0 22px;
+        border: 1px solid rgba(45, 185, 104, 0.65);
+        border-radius: 12px;
+        background: rgba(8, 28, 15, 0.68);
+        box-shadow: 0 0 12px rgba(45, 185, 104, 0.25);
+        padding: 10px 0;
+    }
+
+    .deed-ticker-track {
+        display: inline-block;
+        padding-left: 100%;
+        animation: marquee 24s linear infinite;
+        color: #b5ffcb;
+        font-weight: 700;
+        text-shadow: 0 0 10px #2db968, 0 0 20px #1a8f4f;
+    }
+
     .marquee-text {
         display: inline-block;
         padding-left: 100%;
         animation: marquee 20s linear infinite;
     }
+
+    .step-card {
+        border: 1px solid rgba(45, 185, 104, 0.8) !important;
+        box-shadow: 0 0 12px rgba(45, 185, 104, 0.18);
+        padding: 18px !important;
+    }
+
+    .nature-panel {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid rgba(45, 185, 104, 0.45);
+        border-radius: 14px;
+        padding: 20px;
+        margin-top: 18px;
+        background:
+            linear-gradient(135deg, rgba(9, 27, 16, 0.85), rgba(16, 62, 32, 0.7)),
+            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220' viewBox='0 0 220 220'%3E%3Cg fill='none' stroke='%233ecf78' stroke-opacity='0.2' stroke-width='1.2'%3E%3Cpath d='M30 192c38-42 68-100 72-164'/%3E%3Cpath d='M108 174c20-24 40-58 46-102'/%3E%3Cpath d='M24 138c16-8 28-22 38-38'/%3E%3Cpath d='M130 126c16-12 22-26 28-46'/%3E%3C/g%3E%3C/svg%3E");
+        background-size: cover, 220px 220px;
+        backdrop-filter: blur(3px);
+    }
+
+    .leaderboard-shell {
+        border-radius: 16px;
+        padding: 10px;
+        background: rgba(14, 44, 24, 0.4);
+        border: 1px solid rgba(115, 255, 170, 0.25);
+        box-shadow: inset 0 0 0 1px rgba(16, 82, 40, 0.5), 0 8px 28px rgba(0, 0, 0, 0.25);
+        backdrop-filter: blur(10px);
+    }
+
+    .leaderboard-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0 10px;
+    }
+
+    .leaderboard-table thead th {
+        color: #7ef0ac;
+        text-align: left;
+        font-size: 0.9rem;
+        padding: 6px 12px 10px;
+    }
+
+    .leaderboard-table tbody tr {
+        background: rgba(7, 26, 14, 0.65);
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .leaderboard-table tbody td {
+        padding: 12px;
+        border-top: 1px solid rgba(80, 209, 130, 0.2);
+        border-bottom: 1px solid rgba(80, 209, 130, 0.2);
+    }
+
+    .leaderboard-table tbody td:first-child {
+        border-left: 4px solid rgba(80, 209, 130, 0.35);
+        border-top-left-radius: 12px;
+        border-bottom-left-radius: 12px;
+        width: 70px;
+        font-weight: 700;
+    }
+
+    .leaderboard-table tbody td:last-child {
+        border-right: 1px solid rgba(80, 209, 130, 0.2);
+        border-top-right-radius: 12px;
+        border-bottom-right-radius: 12px;
+        color: #46ff99;
+        font-weight: 800;
+        text-shadow: 0 0 8px rgba(45, 185, 104, 0.45);
+    }
+
+    .leaderboard-table tbody tr.rank-1 td:first-child { border-left-color: #d4af37; }
+    .leaderboard-table tbody tr.rank-2 td:first-child { border-left-color: #c0c0c0; }
+    .leaderboard-table tbody tr.rank-3 td:first-child { border-left-color: #cd7f32; }
 
     .success-modal {
         animation: modal-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -278,6 +380,25 @@ def get_user_total_points(session: Session, username: str) -> int:
     )
     total = result[0]["TOTAL"] if result else 0
     return int(total or 0)
+
+
+def get_recent_deed_feed(session: Session, limit: int = 12) -> list[str]:
+    """Return a short ticker feed of recent deed actions."""
+    rows = (
+        get_leaderboard_df(session)
+        .select("USERNAME", "ACTION_CONTEXT", "CREATED_AT")
+        .filter(F.col("ACTION_CONTEXT").is_not_null())
+        .sort(F.col("CREATED_AT").desc())
+        .limit(limit)
+        .collect()
+    )
+
+    feed = []
+    for row in rows:
+        username = str(row["USERNAME"] or "A Guardian").strip()
+        action = str(row["ACTION_CONTEXT"] or "made a green impact").strip()
+        feed.append(f"{username} has just {action}!")
+    return feed
 
 
 def record_deed(
@@ -548,12 +669,30 @@ def dashboard_page() -> None:
     """,
         unsafe_allow_html=True,
     )
+    try:
+        deed_updates = get_recent_deed_feed(session, limit=12)
+    except Exception:
+        deed_updates = []
+
+    deed_ticker_text = (
+        " ✦ ".join(html.escape(item) for item in deed_updates)
+        if deed_updates
+        else "A Guardian has just planted native trees! ✦ A Guardian has just cleaned up a riverbank!"
+    )
+    st.markdown(
+        f"""
+        <div class="deed-ticker">
+            <div class="deed-ticker-track">🌿 {deed_ticker_text}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     st.markdown("### 🌍 Submit Your Environmental Deed")
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown('<div class="card-container">', unsafe_allow_html=True)
+        st.markdown('<div class="card-container step-card">', unsafe_allow_html=True)
         st.markdown("**Step 1: Describe Your Action**")
         action_context = st.text_area(
             "What environmental action did you take?",
@@ -564,7 +703,7 @@ def dashboard_page() -> None:
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col2:
-        st.markdown('<div class="card-container">', unsafe_allow_html=True)
+        st.markdown('<div class="card-container step-card">', unsafe_allow_html=True)
         st.markdown("**Step 2: Upload Proof**")
         uploaded_file = st.file_uploader(
             "📸 Upload image or video proof",
@@ -714,14 +853,65 @@ def dashboard_page() -> None:
         if not df.empty:
             df.columns = ["Guardian", "Total XP"]
             df.insert(0, "Rank", range(1, len(df) + 1))
+            leaderboard_rows = []
+            for _, row in df.iterrows():
+                rank = int(row["Rank"])
+                row_class = f"rank-{rank}" if rank <= 3 else ""
+                guardian = html.escape(str(row["Guardian"]))
+                xp = html.escape(str(int(row["Total XP"])))
+                leaderboard_rows.append(
+                    f"""
+                    <tr class="{row_class}">
+                        <td>#{rank}</td>
+                        <td>{guardian}</td>
+                        <td>{xp}</td>
+                    </tr>
+                    """
+                )
 
-            st.markdown('<div class="card-container">', unsafe_allow_html=True)
-            st.dataframe(df, use_container_width=True, hide_index=True)
-            st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown(
+                f"""
+                <div class="nature-panel">
+                    <div class="leaderboard-shell">
+                        <table class="leaderboard-table">
+                            <thead>
+                                <tr>
+                                    <th>Rank</th>
+                                    <th>Guardian</th>
+                                    <th>Total XP</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {''.join(leaderboard_rows)}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
         else:
-            st.info("🌱 Be the first to verify a deed and top the leaderboard!")
+            st.markdown(
+                """
+                <div class="nature-panel">
+                    <div class="card-container" style="margin: 0;">
+                        🌱 Be the first to verify a deed and top the leaderboard!
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
     except Exception:
-        st.info("📊 Leaderboard is being initialized. Check back soon!")
+        st.markdown(
+            """
+            <div class="nature-panel">
+                <div class="card-container" style="margin: 0;">
+                    📊 Leaderboard is being initialized. Check back soon!
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 # ============================================================================
