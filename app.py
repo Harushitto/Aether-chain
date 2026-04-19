@@ -1050,6 +1050,27 @@ if "user_xp" not in st.session_state:
 # ============================================================================
 # 7. LOGIN PAGE
 # ============================================================================
+def complete_wallet_login(wallet_address: str) -> None:
+    """Complete wallet login flow and synchronize user metadata."""
+    guardian_name = derive_guardian_name(wallet_address)
+    st.session_state.wallet_address = wallet_address
+    st.session_state.username = guardian_name
+
+    try:
+        session = create_snowflake_session()
+        if not wallet_address_exists(session, wallet_address):
+            create_user_entry(session, guardian_name, wallet_address)
+        st.session_state.user_xp = get_user_total_points(session, guardian_name)
+        st.session_state.logged_in = True
+        st.session_state.daily_wisdom = generate_daily_wisdom()
+        st.rerun()
+    except Exception as e:
+        st.error(
+            "Wallet connected, but login failed while syncing Snowflake. "
+            f"Details: {e}"
+        )
+
+
 def login_page() -> None:
     """Render the wallet-first authentication page."""
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -1082,6 +1103,7 @@ def login_page() -> None:
         st.markdown("#### 🔐 Connect Phantom Wallet")
 
         wallet_payload = phantom_wallet_component()
+        phantom_wallet_connected = False
 
         if isinstance(wallet_payload, dict):
             payload_wallet = (wallet_payload.get("wallet_address") or "").strip()
@@ -1093,22 +1115,8 @@ def login_page() -> None:
             st.session_state.wallet_connect_in_progress = connect_in_progress
 
             if payload_wallet and SOLANA_WALLET_PATTERN.fullmatch(payload_wallet):
-                guardian_name = derive_guardian_name(payload_wallet)
-                st.session_state.wallet_address = payload_wallet
-                st.session_state.username = guardian_name
-                try:
-                    session = create_snowflake_session()
-                    if not wallet_address_exists(session, payload_wallet):
-                        create_user_entry(session, guardian_name, payload_wallet)
-                    st.session_state.user_xp = get_user_total_points(session, guardian_name)
-                    st.session_state.logged_in = True
-                    st.session_state.daily_wisdom = generate_daily_wisdom()
-                    st.rerun()
-                except Exception as e:
-                    st.error(
-                        "Wallet connected, but login failed while syncing Snowflake. "
-                        f"Details: {e}"
-                    )
+                phantom_wallet_connected = True
+                complete_wallet_login(payload_wallet)
             elif payload_error:
                 if str(payload_error).strip() == "Phantom Wallet not detected. Please install the extension.":
                     st.warning("Phantom Wallet not detected. Please install the extension.")
@@ -1116,6 +1124,26 @@ def login_page() -> None:
                     st.info(f"Wallet status: {payload_error}")
             elif wallet_found is False:
                 st.warning("Phantom Wallet not detected. Please install the extension.")
+
+        with st.expander("Or use Manual Wallet Entry", expanded=False):
+            st.caption("Use this fallback if Phantom extension is unavailable.")
+            manual_wallet_input = st.text_input(
+                "Enter Solana wallet address",
+                key="manual_wallet_input",
+                placeholder="e.g. 9xQeWvG816bUx9EPfPy...",
+            )
+            manual_submit = st.button("Continue with Manual Entry", use_container_width=True)
+
+            if manual_submit:
+                submitted_wallet = manual_wallet_input.strip()
+                if not submitted_wallet:
+                    st.error("Please enter a wallet address before submitting.")
+                elif not SOLANA_WALLET_PATTERN.fullmatch(submitted_wallet):
+                    st.error("Invalid Solana Address Format")
+                elif phantom_wallet_connected:
+                    st.info("Phantom wallet connection detected and prioritized over manual entry.")
+                else:
+                    complete_wallet_login(submitted_wallet)
 
         wallet_address = (st.session_state.wallet_address or "").strip()
 
