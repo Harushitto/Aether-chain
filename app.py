@@ -2,6 +2,7 @@ import re
 import hashlib
 import html
 import time
+import textwrap
 from typing import Optional
 
 import google.generativeai as genai
@@ -475,6 +476,30 @@ LEADERBOARD_SCHEMA = [
     "IMAGE_HASH",
     "CREATED_AT",
 ]
+COMMON_DEED_TYPO_CORRECTIONS = {
+    "panted": "planted",
+    "planed": "planted",
+    "plaanted": "planted",
+    "tre": "tree",
+    "tress": "trees",
+    "enviroment": "environment",
+    "enviornment": "environment",
+    "environement": "environment",
+    "recylced": "recycled",
+    "recycleing": "recycling",
+    "cleened": "cleaned",
+    "cleand": "cleaned",
+    "riveer": "river",
+    "beech": "beach",
+}
+
+
+def normalize_action_context(action_context: str) -> str:
+    """Fix common spelling mistakes in deed descriptions."""
+    normalized = action_context
+    for typo, correction in COMMON_DEED_TYPO_CORRECTIONS.items():
+        normalized = re.sub(rf"\b{re.escape(typo)}\b", correction, normalized, flags=re.IGNORECASE)
+    return re.sub(r"\s+", " ", normalized).strip()
 
 
 # ============================================================================
@@ -929,12 +954,13 @@ def dashboard_page() -> None:
     with col1:
         st.markdown('<div class="card-container step-card botanical-step">', unsafe_allow_html=True)
         st.markdown("**Step 1: Describe Your Action**")
-        action_context = st.text_area(
+        raw_action_context = st.text_area(
             "What environmental action did you take?",
             placeholder="E.g., 'I planted 3 Neem trees in my garden' or 'Cleaned up plastic waste from the beach'",
             height=100,
             label_visibility="collapsed",
         ).strip()
+        action_context = normalize_action_context(raw_action_context)
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col2:
@@ -1171,7 +1197,7 @@ def dashboard_page() -> None:
                     """
                 )
 
-            st.markdown(
+            leaderboard_html = textwrap.dedent(
                 f"""
                 <div class="nature-panel">
                     <div class="leaderboard-shell">
@@ -1190,9 +1216,9 @@ def dashboard_page() -> None:
                         </table>
                     </div>
                 </div>
-                """,
-                unsafe_allow_html=True,
-            )
+                """
+            ).strip()
+            st.markdown(leaderboard_html, unsafe_allow_html=True)
         else:
             st.markdown(
                 """
