@@ -8,6 +8,7 @@ from typing import Optional
 import google.generativeai as genai
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 from PIL import Image
 from snowflake.snowpark import Session
 from snowflake.snowpark import functions as F
@@ -472,7 +473,6 @@ st.markdown(
 # 3. CONSTANTS & VALIDATION
 # ============================================================================
 LEADERBOARD_TABLE = "CLIMATE_LEADERBOARD"
-USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_.\- ]{3,30}$")
 SOLANA_WALLET_PATTERN = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")
 GEMINI_CANDIDATE_MODELS = [
     "gemini-2.5-flash",
@@ -504,6 +504,130 @@ COMMON_DEED_TYPO_CORRECTIONS = {
     "riveer": "river",
     "beech": "beach",
 }
+
+
+
+
+def shorten_wallet_address(wallet_address: str) -> str:
+    """Return compact wallet display for username synthesis."""
+    cleaned = (wallet_address or "").strip()
+    if len(cleaned) <= 10:
+        return cleaned
+    return f"{cleaned[:4]}...{cleaned[-3:]}"
+
+
+def derive_guardian_name(wallet_address: str) -> str:
+    """Build deterministic Guardian username directly from wallet."""
+    short_wallet = shorten_wallet_address(wallet_address)
+    return f"Guardian_{short_wallet}"
+
+
+def phantom_wallet_component() -> dict:
+    """Render a small JS component that connects to Phantom and returns wallet metadata."""
+    return components.html(
+        """
+        <div id="phantom-wallet-root">
+            <button id="phantom-connect" style="
+                width: 100%;
+                background: linear-gradient(135deg, #2db968 0%, #1a8f4f 100%);
+                color: #ffffff;
+                border: none;
+                border-radius: 12px;
+                padding: 12px 24px;
+                font-weight: 600;
+                font-size: 1rem;
+                box-shadow: 0 4px 15px rgba(45, 185, 104, 0.3);
+                cursor: pointer;
+            ">🔌 Connect Wallet</button>
+            <div id="phantom-status" style="margin-top: 10px; color: #bfffd7; font-size: 0.9rem;"></div>
+        </div>
+
+        <script src="https://unpkg.com/streamlit-component-lib@1.4.0/dist/index.js"></script>
+        <script>
+            const statusEl = document.getElementById('phantom-status');
+            const connectButton = document.getElementById('phantom-connect');
+
+            function sendPayload(payload) {
+                if (window.Streamlit && window.Streamlit.setComponentValue) {
+                    window.Streamlit.setComponentValue(payload);
+                }
+            }
+
+            function walletAvailable() {
+                return window.solana && window.solana.isPhantom;
+            }
+
+            function refreshStatus() {
+                if (walletAvailable()) {
+                    statusEl.textContent = 'Phantom Wallet detected.';
+                    sendPayload({ connected: false, wallet_found: true, wallet_address: null, error: null });
+                } else {
+                    statusEl.textContent = 'Phantom Wallet not detected. Please install the extension.';
+                    sendPayload({ connected: false, wallet_found: false, wallet_address: null, error: 'Phantom Wallet not detected. Please install the extension.' });
+                }
+            }
+
+            connectButton.addEventListener('click', async () => {
+                if (!walletAvailable()) {
+                    refreshStatus();
+                    return;
+                }
+
+                try {
+                    const response = await window.solana.connect();
+                    const publicKey = response.publicKey.toString();
+                    statusEl.textContent = `Connected: ${publicKey.slice(0, 4)}...${publicKey.slice(-3)}`;
+                    sendPayload({ connected: true, wallet_found: true, wallet_address: publicKey, error: null });
+                } catch (err) {
+                    sendPayload({
+                        connected: false,
+                        wallet_found: true,
+                        wallet_address: null,
+                        error: err && err.message ? err.message : 'Wallet connection failed.'
+                    });
+                    statusEl.textContent = 'Wallet connection cancelled or failed.';
+                }
+            });
+
+            refreshStatus();
+            if (window.Streamlit && window.Streamlit.setFrameHeight) {
+                window.Streamlit.setFrameHeight(110);
+            }
+        </script>
+        """,
+        height=120,
+    )
+
+
+def reset_environment_for_production(session: Session) -> None:
+    """One-time utility: rebuild primary tables and clear test-era records."""
+    session.sql(f"DROP TABLE IF EXISTS {LEADERBOARD_TABLE}").collect()
+    session.sql(
+        f"""
+        CREATE TABLE {LEADERBOARD_TABLE} (
+            USERNAME STRING NOT NULL,
+            WALLET_ADDRESS STRING NOT NULL,
+            POINTS NUMBER(38,0) DEFAULT 0,
+            DEED_TYPE STRING,
+            ACTION_CONTEXT STRING,
+            IMAGE_HASH STRING,
+            CREATED_AT TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
+        )
+        """
+    ).collect()
+
+    # Snowflake does not implement traditional secondary indexes; search optimization
+    # provides index-like acceleration for equality lookups on these identity columns.
+    session.sql(
+        f"ALTER TABLE {LEADERBOARD_TABLE} ADD SEARCH OPTIMIZATION ON EQUALITY(USERNAME, WALLET_ADDRESS)"
+    ).collect()
+
+    # Clear announcement/test channels if they exist from prior staging runs.
+    for table_name in ["ANNOUNCEMENTS", "CLIMATE_ANNOUNCEMENTS", "TEST_ANNOUNCEMENTS"]:
+        try:
+            session.sql(f"DELETE FROM {table_name}").collect()
+        except Exception:
+            continue
 
 
 def normalize_action_context(action_context: str) -> str:
@@ -819,13 +943,15 @@ if "last_award_time" not in st.session_state:
     st.session_state.last_award_time = 0.0
 if "submitted_upload_keys" not in st.session_state:
     st.session_state.submitted_upload_keys = set()
+if "production_reset_done" not in st.session_state:
+    st.session_state.production_reset_done = False
 
 
 # ============================================================================
 # 7. LOGIN PAGE
 # ============================================================================
 def login_page() -> None:
-    """Render the login/authentication page."""
+    """Render the wallet-first authentication page."""
     col1, col2, col3 = st.columns([1, 2, 1])
 
     with col2:
@@ -846,39 +972,47 @@ def login_page() -> None:
             """
             <div class="card-container step-card botanical-step login-header-card">
                 <h3>Welcome, Guardian!</h3>
-                <p>Your journey to a greener planet starts here. Every verified deed earns XP and builds your legacy on the Aether-Chain.</p>
+                <p>Connect Phantom to begin. Your Solana wallet is your single source of identity.</p>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
         st.markdown('<div class="card-container">', unsafe_allow_html=True)
+        st.markdown("#### 🔐 Connect Phantom Wallet")
 
-        username = st.text_input(
-            "👤 Guardian Name",
-            placeholder="Enter your username",
-            key="login_username",
-        ).strip()
+        wallet_payload = phantom_wallet_component()
 
-        wallet_address = st.text_input(
-            "💳 Phantom Wallet Address (Solana)",
-            placeholder="Enter your Solana wallet address",
-            key="login_wallet",
-        ).strip()
+        if isinstance(wallet_payload, dict):
+            payload_wallet = (wallet_payload.get("wallet_address") or "").strip()
+            payload_error = wallet_payload.get("error")
+            wallet_found = wallet_payload.get("wallet_found")
 
-        if st.button("Enter Aether-Chain", type="primary", use_container_width=True):
-            if not username or not wallet_address:
-                st.warning("⚠️ Please enter both your guardian name and wallet address.")
-            elif not USERNAME_PATTERN.fullmatch(username):
-                st.warning("⚠️ Username must be 3-30 chars and use letters, numbers, spaces, _ . -")
-            elif not SOLANA_WALLET_PATTERN.fullmatch(wallet_address):
-                st.warning("⚠️ Please enter a valid Solana wallet address format.")
-            else:
+            if payload_wallet and SOLANA_WALLET_PATTERN.fullmatch(payload_wallet):
+                st.session_state.wallet_address = payload_wallet
+                st.session_state.username = derive_guardian_name(payload_wallet)
+            elif payload_error:
+                if str(payload_error).strip() == "Phantom Wallet not detected. Please install the extension.":
+                    st.warning("Phantom Wallet not detected. Please install the extension.")
+                else:
+                    st.info(f"Wallet status: {payload_error}")
+            elif wallet_found is False:
+                st.warning("Phantom Wallet not detected. Please install the extension.")
+
+        wallet_address = (st.session_state.wallet_address or "").strip()
+
+        if wallet_address:
+            guardian_name = derive_guardian_name(wallet_address)
+            st.session_state.username = guardian_name
+            st.success(f"Connected Wallet: {shorten_wallet_address(wallet_address)}")
+            st.caption(f"Guardian Name is auto-derived: {guardian_name}")
+
+            if st.button("Enter Aether-Chain", type="primary", use_container_width=True):
                 try:
                     session = create_snowflake_session()
-                    create_user_entry(session, username, wallet_address)
+                    create_user_entry(session, guardian_name, wallet_address)
                     st.session_state.logged_in = True
-                    st.session_state.username = username
+                    st.session_state.username = guardian_name
                     st.session_state.wallet_address = wallet_address
                     st.session_state.daily_wisdom = generate_daily_wisdom()
                     st.rerun()
@@ -887,6 +1021,8 @@ def login_page() -> None:
                         "Login failed while connecting to Snowflake. "
                         f"Details: {e}"
                     )
+        else:
+            st.info("Connect your Phantom wallet to continue.")
 
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1272,6 +1408,14 @@ def dashboard_page() -> None:
 # ============================================================================
 def main() -> None:
     configure_gemini()
+
+    if st.secrets.get("RESET_ENVIRONMENT_ON_BOOT") and not st.session_state.get("production_reset_done"):
+        try:
+            reset_environment_for_production(create_snowflake_session())
+            st.session_state.production_reset_done = True
+            st.success("Production reset completed.")
+        except Exception as reset_error:
+            st.error(f"Production reset failed: {reset_error}")
 
     if not st.session_state.logged_in:
         login_page()
