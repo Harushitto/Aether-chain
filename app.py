@@ -488,6 +488,14 @@ LEADERBOARD_SCHEMA = [
     "IMAGE_HASH",
     "CREATED_AT",
 ]
+LEADERBOARD_INSERT_SCHEMA = [
+    "USERNAME",
+    "WALLET_ADDRESS",
+    "POINTS",
+    "DEED_TYPE",
+    "ACTION_CONTEXT",
+    "IMAGE_HASH",
+]
 COMMON_DEED_TYPO_CORRECTIONS = {
     "panted": "planted",
     "planed": "planted",
@@ -681,37 +689,6 @@ def phantom_wallet_component() -> dict:
     )
 
 
-def reset_environment_for_production(session: Session) -> None:
-    """One-time utility: rebuild primary tables and clear test-era records."""
-    session.sql(f"DROP TABLE IF EXISTS {LEADERBOARD_TABLE}").collect()
-    session.sql(
-        f"""
-        CREATE TABLE {LEADERBOARD_TABLE} (
-            USERNAME STRING NOT NULL,
-            WALLET_ADDRESS STRING NOT NULL,
-            POINTS NUMBER(38,0) DEFAULT 0,
-            DEED_TYPE STRING,
-            ACTION_CONTEXT STRING,
-            IMAGE_HASH STRING,
-            CREATED_AT TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
-        )
-        """
-    ).collect()
-
-    # Snowflake does not implement traditional secondary indexes; search optimization
-    # provides index-like acceleration for equality lookups on these identity columns.
-    session.sql(
-        f"ALTER TABLE {LEADERBOARD_TABLE} ADD SEARCH OPTIMIZATION ON EQUALITY(USERNAME, WALLET_ADDRESS)"
-    ).collect()
-
-    # Clear announcement/test channels if they exist from prior staging runs.
-    for table_name in ["ANNOUNCEMENTS", "CLIMATE_ANNOUNCEMENTS", "TEST_ANNOUNCEMENTS"]:
-        try:
-            session.sql(f"DELETE FROM {table_name}").collect()
-        except Exception:
-            continue
-
-
 def normalize_action_context(action_context: str) -> str:
     """Fix common spelling mistakes in deed descriptions."""
     normalized = action_context
@@ -744,6 +721,34 @@ def get_leaderboard_columns(session: Session) -> set[str]:
     return {name.upper() for name in get_leaderboard_df(session).columns}
 
 
+def _sql_literal(value: Optional[object]) -> str:
+    """Return a safe SQL literal for Snowflake INSERT statements."""
+    if value is None:
+        return "NULL"
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    if isinstance(value, (int, float)):
+        return str(value)
+    escaped = str(value).replace("'", "''")
+    return f"'{escaped}'"
+
+
+def insert_leaderboard_row(session: Session, row_payload: dict[str, Optional[object]]) -> None:
+    """Insert leaderboard data with explicit columns to avoid schema/value mismatches."""
+    available_columns = get_leaderboard_columns(session)
+    insert_columns = [
+        col for col in LEADERBOARD_INSERT_SCHEMA if col in available_columns and col in row_payload
+    ]
+    if not insert_columns:
+        raise RuntimeError("No matching leaderboard columns were found for insert.")
+
+    values_sql = ", ".join(_sql_literal(row_payload[col]) for col in insert_columns)
+    columns_sql = ", ".join(insert_columns)
+    session.sql(
+        f"INSERT INTO {LEADERBOARD_TABLE} ({columns_sql}) VALUES ({values_sql})"
+    ).collect()
+
+
 def user_exists(session: Session, username: str) -> bool:
     """Check if a user exists in the leaderboard."""
     count = (
@@ -759,22 +764,20 @@ def create_user_entry(session: Session, username: str, wallet_address: str) -> N
     if user_exists(session, username):
         return
 
-    row_df = session.create_dataframe(
-        [
-            [
-                username,
-                wallet_address,
-                0,
-                "USER_CREATED",
-                "Guardian joined Aether-Chain",
-                None,
-                None,
-            ]
-        ],
-        schema=LEADERBOARD_SCHEMA,
-    )
-    row_df = row_df.with_column("CREATED_AT", F.current_timestamp())
-    row_df.write.mode("append").save_as_table(LEADERBOARD_TABLE)
+    try:
+        insert_leaderboard_row(
+            session,
+            {
+                "USERNAME": username,
+                "WALLET_ADDRESS": wallet_address,
+                "POINTS": 0,
+                "DEED_TYPE": "USER_CREATED",
+                "ACTION_CONTEXT": "Guardian joined Aether-Chain",
+                "IMAGE_HASH": None,
+            },
+        )
+    except Exception as exc:
+        raise RuntimeError("Unable to sync your profile to Snowflake right now.") from exc
 
 
 def wallet_address_exists(session: Session, wallet_address: str) -> bool:
@@ -855,17 +858,20 @@ def record_deed(
     image_hash: Optional[str],
 ) -> None:
     """Record a deed verification result to Snowflake safely."""
-    columns = get_leaderboard_columns(session)
-    if "IMAGE_HASH" in columns:
-        values = [username, wallet_address, points, deed_type, action_context, image_hash, None]
-        schema = LEADERBOARD_SCHEMA
-    else:
-        values = [username, wallet_address, points, deed_type, action_context, None]
-        schema = [col for col in LEADERBOARD_SCHEMA if col != "IMAGE_HASH"]
-
-    row_df = session.create_dataframe([values], schema=schema)
-    row_df = row_df.with_column("CREATED_AT", F.current_timestamp())
-    row_df.write.mode("append").save_as_table(LEADERBOARD_TABLE)
+    try:
+        insert_leaderboard_row(
+            session,
+            {
+                "USERNAME": username,
+                "WALLET_ADDRESS": wallet_address,
+                "POINTS": points,
+                "DEED_TYPE": deed_type,
+                "ACTION_CONTEXT": action_context,
+                "IMAGE_HASH": image_hash,
+            },
+        )
+    except Exception as exc:
+        raise RuntimeError("Unable to record this deed in Snowflake.") from exc
 
 
 def deed_image_already_submitted(session: Session, username: str, image_hash: str) -> bool:
@@ -1035,10 +1041,6 @@ if "last_award_time" not in st.session_state:
     st.session_state.last_award_time = 0.0
 if "submitted_upload_keys" not in st.session_state:
     st.session_state.submitted_upload_keys = set()
-if "production_reset_done" not in st.session_state:
-    st.session_state.production_reset_done = False
-if "production_reset_attempted" not in st.session_state:
-    st.session_state.production_reset_attempted = False
 if "wallet_ready" not in st.session_state:
     st.session_state.wallet_ready = False
 if "wallet_connect_in_progress" not in st.session_state:
@@ -1052,22 +1054,27 @@ if "user_xp" not in st.session_state:
 # ============================================================================
 def complete_wallet_login(wallet_address: str) -> None:
     """Complete wallet login flow and synchronize user metadata."""
+    wallet_address = wallet_address.strip()
+    if not SOLANA_WALLET_PATTERN.fullmatch(wallet_address):
+        st.error("Invalid Solana wallet address. Please verify and try again.")
+        return
+
     guardian_name = derive_guardian_name(wallet_address)
-    st.session_state.wallet_address = wallet_address
-    st.session_state.username = guardian_name
 
     try:
         session = create_snowflake_session()
         if not wallet_address_exists(session, wallet_address):
             create_user_entry(session, guardian_name, wallet_address)
+        st.session_state.wallet_address = wallet_address
+        st.session_state.username = guardian_name
         st.session_state.user_xp = get_user_total_points(session, guardian_name)
         st.session_state.logged_in = True
         st.session_state.daily_wisdom = generate_daily_wisdom()
         st.rerun()
-    except Exception as e:
+    except Exception:
         st.error(
-            "Wallet connected, but login failed while syncing Snowflake. "
-            f"Details: {e}"
+            "We couldn't sync your wallet with Snowflake right now. "
+            "Please try again in a moment."
         )
 
 
@@ -1545,18 +1552,6 @@ def dashboard_page() -> None:
 # ============================================================================
 def main() -> None:
     configure_gemini()
-
-    if (
-        st.secrets.get("RESET_ENVIRONMENT_ON_BOOT")
-        and not st.session_state.get("production_reset_attempted")
-    ):
-        st.session_state.production_reset_attempted = True
-        try:
-            reset_environment_for_production(create_snowflake_session())
-            st.session_state.production_reset_done = True
-            st.success("Production reset completed.")
-        except Exception as reset_error:
-            st.error(f"Production reset failed: {reset_error}")
 
     if not st.session_state.logged_in:
         login_page()
