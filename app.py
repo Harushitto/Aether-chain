@@ -8,7 +8,6 @@ from typing import Optional
 import google.generativeai as genai
 import pandas as pd
 import streamlit as st
-from streamlit.components.v1 import html as components_html
 from PIL import Image
 from snowflake.snowpark import Session
 from snowflake.snowpark import functions as F
@@ -164,18 +163,15 @@ st.markdown(
     }
 
     .deed-ticker {
+        overflow: hidden;
+        white-space: nowrap;
         width: 100%;
         margin: 16px 0 22px;
-        border: 1px solid rgba(79, 235, 145, 0.55);
-        border-radius: 14px;
-        background: linear-gradient(135deg, rgba(8, 30, 16, 0.86), rgba(15, 58, 30, 0.62));
-        box-shadow: 0 0 16px rgba(45, 185, 104, 0.24), inset 0 0 16px rgba(15, 58, 30, 0.42);
-        padding: 12px 16px;
-        min-height: 56px;
-        display: flex;
-        align-items: center;
-        justify-content: flex-start;
-        backdrop-filter: blur(8px);
+        border: 1px solid rgba(45, 185, 104, 0.65);
+        border-radius: 12px;
+        background: rgba(8, 28, 15, 0.68);
+        box-shadow: 0 0 12px rgba(45, 185, 104, 0.25);
+        padding: 10px 0;
     }
 
     .deed-ticker.deed-alert {
@@ -185,19 +181,18 @@ st.markdown(
     }
 
     .deed-ticker-track {
-        display: block;
-        width: 100%;
-        color: #cbffd9;
+        display: inline-block;
+        padding-left: 100%;
+        animation: marquee 24s linear infinite;
+        color: #b5ffcb;
         font-weight: 700;
-        text-shadow: 0 0 8px rgba(115, 255, 170, 0.82), 0 0 20px rgba(45, 185, 104, 0.65);
+        text-shadow: 0 0 10px #2db968, 0 0 20px #1a8f4f;
     }
 
-    .announcement-text {
-        animation: announcement-fade-in 0.8s ease;
-    }
-
-    .announcement-empty {
-        min-height: 1.25rem;
+    .marquee-text {
+        display: inline-block;
+        padding-left: 100%;
+        animation: marquee 20s linear infinite;
     }
 
     .step-card {
@@ -413,15 +408,9 @@ st.markdown(
         margin: 30px 0 !important;
     }
 
-    @keyframes announcement-fade-in {
-        from {
-            opacity: 0;
-            transform: translateY(4px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
+    @keyframes marquee {
+        from { transform: translateX(0%); }
+        to { transform: translateX(-100%); }
     }
 
     @keyframes modal-pop {
@@ -623,7 +612,7 @@ def get_recent_deed_feed(session: Session, limit: int = 12) -> list[str]:
     feed = []
     for row in rows:
         username = str(row["USERNAME"] or "A Guardian").strip()
-        action = normalize_action_context(str(row["ACTION_CONTEXT"] or "made a green impact").strip())
+        action = str(row["ACTION_CONTEXT"] or "made a green impact").strip()
         feed.append(f"{username} has just {action}!")
     return feed
 
@@ -735,10 +724,10 @@ def generate_daily_wisdom() -> str:
         return "🌍 Every action counts. Plant hope, harvest change. 🌱"
 
 
-def verify_deed_with_gemini(image: Image.Image, action_context: str) -> tuple[bool, int, str, str]:
+def verify_deed_with_gemini(image: Image.Image, action_context: str) -> tuple[bool, int, str]:
     """
     Verify deed using Gemini Vision API.
-    Returns: (is_verified: bool, points: int, analysis: str, corrected_action: str)
+    Returns: (is_verified: bool, points: int, analysis: str)
     """
     try:
         model_name = _get_supported_model()
@@ -747,7 +736,6 @@ def verify_deed_with_gemini(image: Image.Image, action_context: str) -> tuple[bo
                 False,
                 0,
                 "Error during verification: No Gemini model with generateContent support is available.",
-                normalize_action_context(action_context),
             )
         model = genai.GenerativeModel(model_name)
         prompt = f"""
@@ -765,7 +753,6 @@ def verify_deed_with_gemini(image: Image.Image, action_context: str) -> tuple[bo
         impact_magnitude: string ("small" or "large")
         points: integer (10-20 for small deeds, 50-100 for large deeds when verified=true, else 0)
         analysis: short 1-2 sentence explanation
-        corrected_action: short corrected version of the input action text; keep wording close and fix spelling/grammar only
         """
         response = model.generate_content([prompt, image])
         payload = (response.text or "").strip()
@@ -774,11 +761,6 @@ def verify_deed_with_gemini(image: Image.Image, action_context: str) -> tuple[bo
         points_match = re.search(r'"?points"?\s*:\s*(\d+)', payload, flags=re.IGNORECASE)
         impact_match = re.search(r'"?impact_magnitude"?\s*:\s*"?(small|large)' , payload, flags=re.IGNORECASE)
         analysis_match = re.search(r'"?analysis"?\s*:\s*"?(.+?)"?\s*(?:\}|$)', payload, flags=re.IGNORECASE | re.DOTALL)
-        corrected_action_match = re.search(
-            r'"?corrected_action"?\s*:\s*"(.+?)"',
-            payload,
-            flags=re.IGNORECASE | re.DOTALL,
-        )
 
         verified = bool(verified_match and verified_match.group(1).lower() == "true")
         parsed_points = int(points_match.group(1)) if points_match else 0
@@ -796,15 +778,10 @@ def verify_deed_with_gemini(image: Image.Image, action_context: str) -> tuple[bo
             if analysis_match
             else "Analysis complete."
         )
-        corrected_action = (
-            normalize_action_context(corrected_action_match.group(1).strip())
-            if corrected_action_match
-            else normalize_action_context(action_context)
-        )
 
-        return verified, points, analysis, corrected_action
+        return verified, points, analysis
     except Exception as e:
-        return False, 0, f"Error during verification: {str(e)}", normalize_action_context(action_context)
+        return False, 0, f"Error during verification: {str(e)}"
 
 
 # ============================================================================
@@ -830,12 +807,6 @@ if "last_award_time" not in st.session_state:
     st.session_state.last_award_time = 0.0
 if "submitted_upload_keys" not in st.session_state:
     st.session_state.submitted_upload_keys = set()
-if "announcement_index" not in st.session_state:
-    st.session_state.announcement_index = 0
-if "last_update_time" not in st.session_state:
-    st.session_state.last_update_time = time.time()
-if "is_visible" not in st.session_state:
-    st.session_state.is_visible = True
 
 
 # ============================================================================
@@ -963,55 +934,18 @@ def dashboard_page() -> None:
     except Exception:
         deed_updates = []
 
-    if not deed_updates:
-        deed_updates = [
-            "A Guardian has just planted native trees!",
-            "A Guardian has just cleaned up a riverbank!",
-        ]
-
-    deed_updates = [normalize_action_context(update) for update in deed_updates]
-    if st.session_state.announcement_index >= len(deed_updates):
-        st.session_state.announcement_index = 0
-
-    current_time = time.time()
-    elapsed = current_time - st.session_state.last_update_time
-
-    if st.session_state.is_visible and elapsed >= 5:
-        st.session_state.is_visible = False
-        st.session_state.last_update_time = current_time
-    elif not st.session_state.is_visible and elapsed >= 4:
-        st.session_state.is_visible = True
-        st.session_state.last_update_time = current_time
-        st.session_state.announcement_index = (st.session_state.announcement_index + 1) % len(deed_updates)
-
-    announcement_placeholder = st.empty()
-    if st.session_state.is_visible:
-        current_announcement = html.escape(deed_updates[st.session_state.announcement_index])
-        announcement_placeholder.markdown(
-            f"""
-            <div class="deed-ticker">
-                <div class="deed-ticker-track announcement-text">🌿 {current_announcement}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    else:
-        announcement_placeholder.empty()
-
-    cycle_seconds = 5 if st.session_state.is_visible else 4
-    ms_until_switch = max(
-        300,
-        int((cycle_seconds - (time.time() - st.session_state.last_update_time)) * 1000),
+    deed_ticker_text = (
+        " ✦ ".join(html.escape(item) for item in deed_updates)
+        if deed_updates
+        else "A Guardian has just planted native trees! ✦ A Guardian has just cleaned up a riverbank!"
     )
-    components_html(
+    st.markdown(
         f"""
-        <script>
-            setTimeout(function() {{
-                window.parent.location.reload();
-            }}, {ms_until_switch});
-        </script>
+        <div class="deed-ticker">
+            <div class="deed-ticker-track">🌿 {deed_ticker_text}</div>
+        </div>
         """,
-        height=0,
+        unsafe_allow_html=True,
     )
 
     st.markdown("### 🌍 Submit Your Environmental Deed")
@@ -1109,15 +1043,14 @@ def dashboard_page() -> None:
                         st.session_state.last_processed_submission_key = submission_key
                         st.session_state.submitted_upload_keys.add(submission_key)
                         img = Image.open(uploaded_file)
-                        verified, points, analysis, corrected_action = verify_deed_with_gemini(img, action_context)
-                        final_action_context = corrected_action or action_context
+                        verified, points, analysis = verify_deed_with_gemini(img, action_context)
 
                         deed_type = "Verified Deed" if verified else "Rejected Deed"
                         record_deed(
                             session,
                             st.session_state.username,
                             st.session_state.wallet_address,
-                            final_action_context,
+                            action_context,
                             points,
                             deed_type,
                             image_hash,
@@ -1125,7 +1058,7 @@ def dashboard_page() -> None:
 
                         if verified:
                             st.session_state.deed_alert_text = (
-                                f"{html.escape(st.session_state.username)} has just {html.escape(final_action_context)}!"
+                                f"{html.escape(st.session_state.username)} has just {html.escape(action_context)}!"
                             )
                             st.session_state.deed_alert_time = time.time()
                             st.session_state.last_awarded_points = points
