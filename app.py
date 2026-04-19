@@ -194,7 +194,15 @@ st.markdown(
 LEADERBOARD_TABLE = "CLIMATE_LEADERBOARD"
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_.\- ]{3,30}$")
 SOLANA_WALLET_PATTERN = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")
-GEMINI_CANDIDATE_MODELS = ["gemini-1.5-flash", "models/gemini-1.5-flash"]
+GEMINI_CANDIDATE_MODELS = ["gemini-1.5-flash"]
+LEADERBOARD_SCHEMA = [
+    "USERNAME",
+    "WALLET_ADDRESS",
+    "POINTS",
+    "DEED_TYPE",
+    "ACTION_CONTEXT",
+    "CREATED_AT",
+]
 
 
 # ============================================================================
@@ -203,7 +211,13 @@ GEMINI_CANDIDATE_MODELS = ["gemini-1.5-flash", "models/gemini-1.5-flash"]
 @st.cache_resource
 def create_snowflake_session() -> Session:
     """Create and cache a Snowflake session for the active Streamlit worker."""
-    return Session.builder.configs(st.secrets["snowflake"]).create()
+    try:
+        return Session.builder.configs(st.secrets["snowflake"]).create()
+    except Exception as e:
+        raise RuntimeError(
+            "Failed to create Snowflake session. Verify Streamlit secrets for "
+            "account, user, password/authenticator, role, warehouse, database, and schema."
+        ) from e
 
 
 def get_leaderboard_df(session: Session):
@@ -226,8 +240,17 @@ def create_user_entry(session: Session, username: str, wallet_address: str) -> N
         return
 
     row_df = session.create_dataframe(
-        [[username, wallet_address, 0, "User Created", "Guardian joined Aether-Chain"]],
-        schema=["USERNAME", "WALLET_ADDRESS", "POINTS", "DEED_TYPE", "ACTION_CONTEXT"],
+        [
+            [
+                username,
+                wallet_address,
+                0,
+                "USER_CREATED",
+                "Guardian joined Aether-Chain",
+                None,
+            ]
+        ],
+        schema=LEADERBOARD_SCHEMA,
     )
     row_df = row_df.with_column("CREATED_AT", F.current_timestamp())
     row_df.write.mode("append").save_as_table(LEADERBOARD_TABLE)
@@ -255,8 +278,8 @@ def record_deed(
 ) -> None:
     """Record a deed verification result to Snowflake safely."""
     row_df = session.create_dataframe(
-        [[username, wallet_address, points, deed_type, action_context]],
-        schema=["USERNAME", "WALLET_ADDRESS", "POINTS", "DEED_TYPE", "ACTION_CONTEXT"],
+        [[username, wallet_address, points, deed_type, action_context, None]],
+        schema=LEADERBOARD_SCHEMA,
     )
     row_df = row_df.with_column("CREATED_AT", F.current_timestamp())
     row_df.write.mode("append").save_as_table(LEADERBOARD_TABLE)
@@ -267,13 +290,16 @@ def record_deed(
 # ============================================================================
 def configure_gemini() -> None:
     """Configure Gemini API."""
-    if "GEMINI_API_KEY" in st.secrets:
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    api_key = st.secrets.get("GEMINI_API_KEY")
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY is missing from Streamlit secrets.")
+    genai.configure(api_key=api_key)
 
 
 def _get_supported_model() -> Optional[str]:
     """Return a supported Gemini model id for generate_content."""
     try:
+        configure_gemini()
         available = {
             m.name
             for m in genai.list_models()
@@ -284,7 +310,7 @@ def _get_supported_model() -> Optional[str]:
             if candidate in available:
                 return candidate
             if f"models/{candidate}" in available:
-                return f"models/{candidate}"
+                return candidate
     except Exception:
         return GEMINI_CANDIDATE_MODELS[0]
     return GEMINI_CANDIDATE_MODELS[0]
@@ -407,8 +433,11 @@ def login_page() -> None:
                     st.session_state.wallet_address = wallet_address
                     st.session_state.daily_wisdom = generate_daily_wisdom()
                     st.rerun()
-                except Exception:
-                    st.error("Login failed. Please verify database credentials and try again.")
+                except Exception as e:
+                    st.error(
+                        "Login failed while connecting to Snowflake. "
+                        f"Details: {e}"
+                    )
 
         st.markdown("</div>", unsafe_allow_html=True)
 
