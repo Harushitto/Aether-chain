@@ -1158,62 +1158,38 @@ def dashboard_page() -> None:
 
     st.markdown("### 🏆 Global Leaderboard")
     try:
-        leaderboard_df = (
-            get_leaderboard_df(session)
-            .select(
-                F.upper(F.col("USERNAME")).alias("USERNAME"),
-                F.coalesce(F.col("POINTS").cast("INTEGER"), F.lit(0)).alias("POINTS"),
-            )
-            .limit(5000)
-            .to_pandas()
-        )
+        leaderboard_df = get_leaderboard_df(session).to_pandas()
 
         if not leaderboard_df.empty:
+            leaderboard_df["USERNAME"] = leaderboard_df["USERNAME"].astype(str).str.upper()
             leaderboard_df["POINTS"] = pd.to_numeric(leaderboard_df["POINTS"], errors="coerce").fillna(0).astype(int)
-            leaderboard_df = (
-                leaderboard_df.groupby("USERNAME", as_index=False)
-                .agg({"POINTS": "sum"})
-                .rename(columns={"USERNAME": "Guardian", "POINTS": "Total XP"})
-            )
-            leaderboard_df = leaderboard_df.sort_values(by="Total XP", ascending=False, kind="stable").head(20).reset_index(drop=True)
-            leaderboard_df.insert(0, "Rank", range(1, len(leaderboard_df) + 1))
-            leaderboard_df.insert(1, "Level", leaderboard_df["Total XP"].apply(get_guardian_title))
+            leaderboard_df = leaderboard_df.groupby("USERNAME", as_index=False)["POINTS"].sum()
+            leaderboard_df = leaderboard_df.sort_values(by="POINTS", ascending=False, kind="stable").head(20).reset_index(drop=True)
+            leaderboard_df.insert(0, "RANK", range(1, len(leaderboard_df) + 1))
+            leaderboard_df.insert(1, "LEVEL", leaderboard_df["POINTS"].apply(get_guardian_title))
 
-            leaderboard_rows = []
+            table_html = "<table class='leaderboard-table'><thead><tr><th>Rank</th><th>Level</th><th>Guardian</th><th>Total XP</th></tr></thead><tbody>"
             for _, row in leaderboard_df.iterrows():
-                rank = int(row["Rank"])
+                rank = int(row["RANK"])
                 row_class = f"rank-{rank}" if rank <= 3 else ""
-                guardian = html.escape(str(row["Guardian"]))
-                level = html.escape(str(row["Level"]))
-                xp = html.escape(str(int(row["Total XP"])))
-                leaderboard_rows.append(
-                    f"""
-                    <tr class="{row_class}">
-                        <td>{rank}</td>
-                        <td>{level}</td>
-                        <td>{guardian}</td>
-                        <td>{xp}</td>
-                    </tr>
-                    """
+                guardian = html.escape(str(row["USERNAME"]))
+                level = html.escape(str(row["LEVEL"]))
+                xp = html.escape(str(int(row["POINTS"])))
+                table_html += (
+                    f"<tr class='{row_class}'>"
+                    f"<td>{rank}</td>"
+                    f"<td>{level}</td>"
+                    f"<td>{guardian}</td>"
+                    f"<td>{xp} XP</td>"
+                    f"</tr>"
                 )
+            table_html += "</tbody></table>"
 
             leaderboard_html = textwrap.dedent(
                 f"""
                 <div class="nature-panel">
                     <div class="leaderboard-shell">
-                        <table class="leaderboard-table">
-                            <thead>
-                                <tr>
-                                    <th>Rank</th>
-                                    <th>Level</th>
-                                    <th>Guardian</th>
-                                    <th>Total XP</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {''.join(leaderboard_rows)}
-                            </tbody>
-                        </table>
+                        {table_html}
                     </div>
                 </div>
                 """
