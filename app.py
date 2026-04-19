@@ -200,6 +200,95 @@ st.markdown(
         padding: 18px !important;
     }
 
+    .botanical-step {
+        position: relative;
+        overflow: hidden;
+        background:
+            linear-gradient(140deg, rgba(10, 34, 18, 0.85) 0%, rgba(18, 62, 34, 0.66) 100%),
+            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='280' height='180' viewBox='0 0 280 180'%3E%3Cg fill='none' stroke='%2376f1a6' stroke-opacity='0.25' stroke-width='1.5'%3E%3Cpath d='M20 164c45-34 72-88 78-146'/%3E%3Cpath d='M72 154c39-24 66-66 78-118'/%3E%3Cpath d='M132 165c26-20 48-52 62-96'/%3E%3Cpath d='M190 160c18-16 36-42 48-76'/%3E%3C/g%3E%3C/svg%3E");
+        background-size: cover, 320px 220px;
+        backdrop-filter: blur(3px);
+    }
+
+    .quote-banner {
+        margin: 10px 0 20px;
+        padding: 12px 16px;
+        border-left: 3px solid rgba(126, 240, 172, 0.75);
+        background: rgba(8, 28, 15, 0.58);
+        border-radius: 10px;
+        font-style: italic;
+        color: #d9ffe8;
+        letter-spacing: 0.2px;
+    }
+
+    .wallet-card {
+        text-align: center;
+        background: rgba(14, 44, 24, 0.48);
+        border: 1px solid rgba(125, 247, 173, 0.35);
+        box-shadow: 0 0 18px rgba(45, 185, 104, 0.24), inset 0 0 20px rgba(8, 23, 14, 0.45);
+        backdrop-filter: blur(10px);
+        padding: 28px 22px !important;
+    }
+
+    .status-card {
+        border-radius: 14px;
+        background: linear-gradient(145deg, rgba(11, 34, 18, 0.9), rgba(19, 70, 38, 0.55));
+        border: 1px solid rgba(115, 255, 170, 0.4);
+        padding: 22px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    }
+
+    .title-pill {
+        display: inline-block;
+        padding: 6px 12px;
+        border-radius: 999px;
+        background: rgba(34, 139, 79, 0.35);
+        border: 1px solid rgba(126, 240, 172, 0.45);
+        font-weight: 700;
+        color: #bfffd7;
+        margin-bottom: 12px;
+    }
+
+    .title-pill.legendary {
+        background: linear-gradient(120deg, rgba(245, 211, 117, 0.24), rgba(111, 255, 185, 0.28));
+        border-color: rgba(245, 211, 117, 0.8);
+        color: #ffe7a8;
+        box-shadow: 0 0 14px rgba(245, 211, 117, 0.65), 0 0 24px rgba(111, 255, 185, 0.45);
+        animation: legendary-glow 2.1s ease-in-out infinite;
+    }
+
+    .xp-value.bump {
+        animation: xp-bump 0.75s ease;
+    }
+
+    .xp-float {
+        position: absolute;
+        right: 14px;
+        top: 10px;
+        font-size: 1.05rem;
+        font-weight: 800;
+        color: #9affbe;
+        text-shadow: 0 0 10px rgba(80, 255, 155, 0.8);
+        animation: floatUp 1.8s ease forwards;
+        pointer-events: none;
+    }
+
+    .progress-wrap {
+        width: 100%;
+        height: 12px;
+        border-radius: 999px;
+        background: rgba(9, 26, 14, 0.85);
+        border: 1px solid rgba(95, 226, 146, 0.28);
+        overflow: hidden;
+        margin: 8px 0 4px;
+    }
+
+    .progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #2db968, #7cf4ad);
+        box-shadow: 0 0 10px rgba(45, 185, 104, 0.45);
+    }
+
     .botanical-filler {
         position: relative;
         min-height: 120px;
@@ -344,6 +433,23 @@ st.markdown(
             transform: translateY(-1px);
         }
     }
+
+    @keyframes floatUp {
+        0% { opacity: 0; transform: translateY(12px) scale(0.95); }
+        15% { opacity: 1; }
+        100% { opacity: 0; transform: translateY(-30px) scale(1.05); }
+    }
+
+    @keyframes xp-bump {
+        0% { transform: scale(1); }
+        45% { transform: scale(1.14); }
+        100% { transform: scale(1); }
+    }
+
+    @keyframes legendary-glow {
+        0%, 100% { filter: brightness(1); }
+        50% { filter: brightness(1.22); }
+    }
 </style>
 """,
     unsafe_allow_html=True,
@@ -439,6 +545,33 @@ def get_user_total_points(session: Session, username: str) -> int:
     total = result[0]["TOTAL"] if result else 0
     return int(total or 0)
 
+
+
+
+def get_guardian_title(points: int) -> str:
+    """Return guardian rank title for a total XP score."""
+    if points <= 50:
+        return "Rookie"
+    if points <= 200:
+        return "Earther"
+    if points <= 500:
+        return "Verdant Scout"
+    if points <= 999:
+        return "Nature Guardian"
+    return "Earth Legend"
+
+
+def get_next_rank_target(points: int) -> tuple[int, Optional[int]]:
+    """Return (current floor, next target) for rank progression; next target None when max rank."""
+    if points <= 50:
+        return 0, 51
+    if points <= 200:
+        return 51, 201
+    if points <= 500:
+        return 201, 501
+    if points <= 999:
+        return 501, 1000
+    return 1000, None
 
 def get_recent_deed_feed(session: Session, limit: int = 12) -> list[str]:
     """Return a short ticker feed of recent deed actions."""
@@ -587,7 +720,8 @@ def verify_deed_with_gemini(image: Image.Image, action_context: str) -> tuple[bo
 
         Return strict JSON with keys:
         verified: boolean
-        points: integer (10 only when verified=true, else 0)
+        impact_magnitude: string ("small" or "large")
+        points: integer (10-20 for small deeds, 50-100 for large deeds when verified=true, else 0)
         analysis: short 1-2 sentence explanation
         """
         response = model.generate_content([prompt, image])
@@ -595,11 +729,20 @@ def verify_deed_with_gemini(image: Image.Image, action_context: str) -> tuple[bo
 
         verified_match = re.search(r'"?verified"?\s*:\s*(true|false)', payload, flags=re.IGNORECASE)
         points_match = re.search(r'"?points"?\s*:\s*(\d+)', payload, flags=re.IGNORECASE)
+        impact_match = re.search(r'"?impact_magnitude"?\s*:\s*"?(small|large)' , payload, flags=re.IGNORECASE)
         analysis_match = re.search(r'"?analysis"?\s*:\s*"?(.+?)"?\s*(?:\}|$)', payload, flags=re.IGNORECASE | re.DOTALL)
 
         verified = bool(verified_match and verified_match.group(1).lower() == "true")
         parsed_points = int(points_match.group(1)) if points_match else 0
-        points = 10 if verified and parsed_points >= 10 else 0
+        impact = impact_match.group(1).lower() if impact_match else "small"
+
+        if verified:
+            if impact == "large":
+                points = max(50, min(parsed_points, 100)) if parsed_points else 60
+            else:
+                points = max(10, min(parsed_points, 20)) if parsed_points else 15
+        else:
+            points = 0
         analysis = (
             analysis_match.group(1).strip().strip('"')
             if analysis_match
@@ -628,6 +771,10 @@ if "deed_alert_text" not in st.session_state:
     st.session_state.deed_alert_text = ""
 if "deed_alert_time" not in st.session_state:
     st.session_state.deed_alert_time = 0.0
+if "last_awarded_points" not in st.session_state:
+    st.session_state.last_awarded_points = 0
+if "last_award_time" not in st.session_state:
+    st.session_state.last_award_time = 0.0
 
 
 # ============================================================================
@@ -744,10 +891,8 @@ def dashboard_page() -> None:
     )
     st.markdown(
         f"""
-        <div class="ticker-container">
-            <div class="marquee-text">
-                💡 <strong>Aether-Chain Update:</strong> {wisdom_text}
-            </div>
+        <div class="quote-banner">
+            {html.escape(wisdom_text)}
         </div>
     """,
         unsafe_allow_html=True,
@@ -775,7 +920,7 @@ def dashboard_page() -> None:
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown('<div class="card-container step-card">', unsafe_allow_html=True)
+        st.markdown('<div class="card-container step-card botanical-step">', unsafe_allow_html=True)
         st.markdown("**Step 1: Describe Your Action**")
         action_context = st.text_area(
             "What environmental action did you take?",
@@ -786,7 +931,7 @@ def dashboard_page() -> None:
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col2:
-        st.markdown('<div class="card-container step-card">', unsafe_allow_html=True)
+        st.markdown('<div class="card-container step-card botanical-step">', unsafe_allow_html=True)
         st.markdown("**Step 2: Upload Proof**")
         uploaded_file = st.file_uploader(
             "📸 Upload image or video proof",
@@ -875,6 +1020,8 @@ def dashboard_page() -> None:
                                 f"{html.escape(st.session_state.username)} has just {html.escape(action_context)}!"
                             )
                             st.session_state.deed_alert_time = time.time()
+                            st.session_state.last_awarded_points = points
+                            st.session_state.last_award_time = time.time()
                             st.markdown(
                                 f"""
                                 <div class="success-modal card-container" style="border: 2px solid #2db968; background: linear-gradient(135deg, #0f3018 0%, #1a8f4f20 100%);">
@@ -905,16 +1052,32 @@ def dashboard_page() -> None:
 
     try:
         user_points = get_user_total_points(session, st.session_state.username)
+        title = get_guardian_title(user_points)
+        floor, next_target = get_next_rank_target(user_points)
+        if next_target is None:
+            progress_pct = 100.0
+            progress_caption = "Max rank achieved"
+        else:
+            span = max(1, next_target - floor)
+            progress_pct = max(0.0, min(100.0, ((user_points - floor) / span) * 100))
+            progress_caption = f"{max(next_target - user_points, 0)} XP to {get_guardian_title(next_target)}"
+
+        mask_wallet = f"{st.session_state.wallet_address[:4]}...{st.session_state.wallet_address[-4:]}"
+        show_float = (
+            st.session_state.last_awarded_points > 0
+            and (time.time() - st.session_state.last_award_time) < 2.5
+        )
 
         col1, col2, col3 = st.columns(3)
         with col1:
             st.markdown(
                 f"""
-            <div class="card-container" style="text-align: center;">
+            <div class="card-container" style="text-align: center; position: relative;">
                 <h3 style="color: #2db968; margin: 0;">Your XP</h3>
-                <p style="font-size: 2.5rem; color: #2db968; font-weight: bold; margin: 10px 0;">
+                <p class="xp-value {'bump' if show_float else ''}" style="font-size: 2.5rem; color: #2db968; font-weight: bold; margin: 10px 0;">
                     {user_points}
                 </p>
+                {f'<div class="xp-float">+{st.session_state.last_awarded_points} XP</div>' if show_float else ''}
             </div>
             """,
                 unsafe_allow_html=True,
@@ -923,10 +1086,10 @@ def dashboard_page() -> None:
         with col2:
             st.markdown(
                 f"""
-            <div class="card-container" style="text-align: center;">
-                <h3 style="color: #2db968; margin: 0;">Wallet</h3>
-                <p style="font-size: 0.9rem; color: #e8f5e9; margin: 10px 0; word-break: break-all;">
-                    {st.session_state.wallet_address[:10]}...
+            <div class="card-container wallet-card">
+                <h3 style="color: #7ef0ac; margin: 0;">Private Wallet</h3>
+                <p style="font-size: 1.05rem; color: #e8f5e9; margin: 14px 0 0; letter-spacing: 1px;">
+                    {mask_wallet}
                 </p>
             </div>
             """,
@@ -934,13 +1097,15 @@ def dashboard_page() -> None:
             )
 
         with col3:
+            status_class = "title-pill legendary" if title == "Earth Legend" else "title-pill"
             st.markdown(
-                """
-            <div class="card-container" style="text-align: center;">
-                <h3 style="color: #2db968; margin: 0;">Status</h3>
-                <p style="font-size: 1.2rem; color: #2db968; font-weight: bold; margin: 10px 0;">
-                    🌱 Active
-                </p>
+                f"""
+            <div class="status-card">
+                <h3 style="color: #8ff7b9; margin: 0;">Status</h3>
+                <div class="{status_class}">{title}</div>
+                <div style="font-size: 0.84rem; color: #b5ffcb;">Progress to next rank</div>
+                <div class="progress-wrap"><div class="progress-bar" style="width: {progress_pct:.1f}%;"></div></div>
+                <div style="font-size: 0.82rem; color: #9de7b8;">{progress_caption}</div>
             </div>
             """,
                 unsafe_allow_html=True,
@@ -955,42 +1120,36 @@ def dashboard_page() -> None:
         leaderboard_df = (
             get_leaderboard_df(session)
             .select(
-                F.upper(F.col("USERNAME")).alias("GUARDIAN"),
-                F.coalesce(F.col("POINTS").cast("INTEGER"), F.lit(0)).alias("POINTS_INT"),
+                F.upper(F.col("USERNAME")).alias("USERNAME"),
+                F.coalesce(F.col("POINTS").cast("INTEGER"), F.lit(0)).alias("POINTS"),
             )
-            .group_by("GUARDIAN")
-            .agg(F.sum(F.col("POINTS_INT")).alias("TOTAL_XP"))
-            .sort(F.col("TOTAL_XP").desc())
-            .limit(20)
+            .limit(5000)
             .to_pandas()
         )
 
         if not leaderboard_df.empty:
-            leaderboard_df = leaderboard_df.rename(
-                columns={"GUARDIAN": "Guardian", "TOTAL_XP": "Total XP"}
+            leaderboard_df["POINTS"] = pd.to_numeric(leaderboard_df["POINTS"], errors="coerce").fillna(0).astype(int)
+            leaderboard_df = (
+                leaderboard_df.groupby("USERNAME", as_index=False)
+                .agg({"POINTS": "sum"})
+                .rename(columns={"USERNAME": "Guardian", "POINTS": "Total XP"})
             )
-            leaderboard_df["Total XP"] = (
-                pd.to_numeric(leaderboard_df["Total XP"], errors="coerce")
-                .fillna(0)
-                .astype(int)
-            )
-            leaderboard_df = leaderboard_df.sort_values(
-                by="Total XP",
-                ascending=False,
-                kind="stable",
-            ).reset_index(drop=True)
+            leaderboard_df = leaderboard_df.sort_values(by="Total XP", ascending=False, kind="stable").head(20).reset_index(drop=True)
             leaderboard_df.insert(0, "Rank", range(1, len(leaderboard_df) + 1))
+            leaderboard_df.insert(1, "Level", leaderboard_df["Total XP"].apply(get_guardian_title))
 
             leaderboard_rows = []
             for _, row in leaderboard_df.iterrows():
                 rank = int(row["Rank"])
                 row_class = f"rank-{rank}" if rank <= 3 else ""
                 guardian = html.escape(str(row["Guardian"]))
+                level = html.escape(str(row["Level"]))
                 xp = html.escape(str(int(row["Total XP"])))
                 leaderboard_rows.append(
                     f"""
                     <tr class="{row_class}">
-                        <td>#{rank}</td>
+                        <td>{rank}</td>
+                        <td>{level}</td>
                         <td>{guardian}</td>
                         <td>{xp}</td>
                     </tr>
@@ -1005,6 +1164,7 @@ def dashboard_page() -> None:
                             <thead>
                                 <tr>
                                     <th>Rank</th>
+                                    <th>Level</th>
                                     <th>Guardian</th>
                                     <th>Total XP</th>
                                 </tr>
