@@ -544,10 +544,10 @@ def dashboard_page():
 # 8. MAIN EXECUTION
 # ============================================================================
 def main():
-    # 1. Start the AI
+    # REQUIRED: This activates your API key so verify_deed works
     configure_gemini()
     
-    # 2. Route the user based on login status
+    # Route the user
     if not st.session_state.logged_in:
         login_page()
     else:
