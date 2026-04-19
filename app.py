@@ -230,6 +230,11 @@ def get_leaderboard_df(session: Session):
     return session.table(LEADERBOARD_TABLE)
 
 
+def get_leaderboard_columns(session: Session) -> set[str]:
+    """Return uppercase column names currently available on the leaderboard table."""
+    return {name.upper() for name in get_leaderboard_df(session).columns}
+
+
 def user_exists(session: Session, username: str) -> bool:
     """Check if a user exists in the leaderboard."""
     count = (
@@ -285,16 +290,26 @@ def record_deed(
     image_hash: Optional[str],
 ) -> None:
     """Record a deed verification result to Snowflake safely."""
-    row_df = session.create_dataframe(
-        [[username, wallet_address, points, deed_type, action_context, image_hash, None]],
-        schema=LEADERBOARD_SCHEMA,
-    )
+    columns = get_leaderboard_columns(session)
+    if "IMAGE_HASH" in columns:
+        values = [username, wallet_address, points, deed_type, action_context, image_hash, None]
+        schema = LEADERBOARD_SCHEMA
+    else:
+        values = [username, wallet_address, points, deed_type, action_context, None]
+        schema = [col for col in LEADERBOARD_SCHEMA if col != "IMAGE_HASH"]
+
+    row_df = session.create_dataframe([values], schema=schema)
     row_df = row_df.with_column("CREATED_AT", F.current_timestamp())
     row_df.write.mode("append").save_as_table(LEADERBOARD_TABLE)
 
 
 def deed_image_already_submitted(session: Session, username: str, image_hash: str) -> bool:
     """Check whether the user has already submitted the same image hash."""
+    columns = get_leaderboard_columns(session)
+    if "IMAGE_HASH" not in columns:
+        # Backward-compatible path for older table schemas that predate IMAGE_HASH.
+        return False
+
     count = (
         get_leaderboard_df(session)
         .filter(F.upper(F.col("USERNAME")) == F.lit(username.upper()))
