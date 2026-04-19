@@ -1,7 +1,6 @@
 import re
 import hashlib
 import html
-import time
 from typing import Optional
 
 import google.generativeai as genai
@@ -87,10 +86,6 @@ st.markdown(
     .stButton > button[kind="primary"]:hover {
         box-shadow: 0 0 18px rgba(45, 185, 104, 0.95), 0 0 32px rgba(26, 143, 79, 0.7);
         filter: brightness(1.08);
-    }
-
-    .stButton > button[kind="primary"] {
-        animation: pulse-glow 2.4s ease-in-out infinite;
     }
 
     .stTextInput > div > div > input,
@@ -196,16 +191,6 @@ st.markdown(
         border: 1px solid rgba(45, 185, 104, 0.8) !important;
         box-shadow: 0 0 12px rgba(45, 185, 104, 0.18);
         padding: 18px !important;
-    }
-
-    .botanical-card {
-        background-image:
-            linear-gradient(rgba(15, 48, 24, 0.84), rgba(15, 48, 24, 0.84)),
-            url("https://www.transparenttextures.com/patterns/leaves.png");
-        background-color: rgba(15, 48, 24, 0.8);
-        background-size: auto, 240px 240px;
-        background-repeat: repeat;
-        backdrop-filter: blur(2px);
     }
 
     .nature-panel {
@@ -407,6 +392,25 @@ def get_user_total_points(session: Session, username: str) -> int:
     )
     total = result[0]["TOTAL"] if result else 0
     return int(total or 0)
+
+
+def get_recent_deed_feed(session: Session, limit: int = 12) -> list[str]:
+    """Return a short ticker feed of recent deed actions."""
+    rows = (
+        get_leaderboard_df(session)
+        .select("USERNAME", "ACTION_CONTEXT", "CREATED_AT")
+        .filter(F.col("ACTION_CONTEXT").is_not_null())
+        .sort(F.col("CREATED_AT").desc())
+        .limit(limit)
+        .collect()
+    )
+
+    feed = []
+    for row in rows:
+        username = str(row["USERNAME"] or "A Guardian").strip()
+        action = str(row["ACTION_CONTEXT"] or "made a green impact").strip()
+        feed.append(f"{username} has just {action}!")
+    return feed
 
 
 def record_deed(
@@ -681,30 +685,30 @@ def dashboard_page() -> None:
     """,
         unsafe_allow_html=True,
     )
-    deed_alert_placeholder = st.empty()
-    alert_is_fresh = (
-        bool(st.session_state.deed_alert_text)
-        and (time.time() - st.session_state.deed_alert_time) <= 10
+    try:
+        deed_updates = get_recent_deed_feed(session, limit=12)
+    except Exception:
+        deed_updates = []
+
+    deed_ticker_text = (
+        " ✦ ".join(html.escape(item) for item in deed_updates)
+        if deed_updates
+        else "A Guardian has just planted native trees! ✦ A Guardian has just cleaned up a riverbank!"
     )
-    if alert_is_fresh:
-        deed_alert_placeholder.markdown(
-            f"""
-            <div class="deed-ticker">
-                <div class="deed-ticker-track">🌿 {st.session_state.deed_alert_text}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    else:
-        st.session_state.deed_alert_text = ""
-        st.session_state.deed_alert_time = 0.0
-        deed_alert_placeholder.empty()
+    st.markdown(
+        f"""
+        <div class="deed-ticker">
+            <div class="deed-ticker-track">🌿 {deed_ticker_text}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     st.markdown("### 🌍 Submit Your Environmental Deed")
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown('<div class="card-container step-card botanical-card">', unsafe_allow_html=True)
+        st.markdown('<div class="card-container step-card">', unsafe_allow_html=True)
         st.markdown("**Step 1: Describe Your Action**")
         action_context = st.text_area(
             "What environmental action did you take?",
@@ -715,7 +719,7 @@ def dashboard_page() -> None:
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col2:
-        st.markdown('<div class="card-container step-card botanical-card">', unsafe_allow_html=True)
+        st.markdown('<div class="card-container step-card">', unsafe_allow_html=True)
         st.markdown("**Step 2: Upload Proof**")
         uploaded_file = st.file_uploader(
             "📸 Upload image or video proof",
@@ -871,19 +875,20 @@ def dashboard_page() -> None:
         )
 
         if not df.empty:
-            df["TOTAL_XP"] = pd.to_numeric(df["TOTAL_XP"], errors="coerce").fillna(0).astype(int)
-            df["Rank"] = range(1, len(df) + 1)
-            display_df = df.rename(columns={"GUARDIAN": "Guardian", "TOTAL_XP": "Total XP"})[["Rank", "Guardian", "Total XP"]]
-            rows_html = []
-            for _, row in display_df.iterrows():
+            df.columns = ["Guardian", "Total XP"]
+            df.insert(0, "Rank", range(1, len(df) + 1))
+            leaderboard_rows = []
+            for _, row in df.iterrows():
                 rank = int(row["Rank"])
-                rank_class = f"rank-{rank}" if rank <= 3 else ""
-                rows_html.append(
+                row_class = f"rank-{rank}" if rank <= 3 else ""
+                guardian = html.escape(str(row["Guardian"]))
+                xp = html.escape(str(int(row["Total XP"])))
+                leaderboard_rows.append(
                     f"""
-                    <tr class="{rank_class}">
+                    <tr class="{row_class}">
                         <td>#{rank}</td>
-                        <td>{html.escape(str(row["Guardian"]))}</td>
-                        <td>{int(row["Total XP"])} XP</td>
+                        <td>{guardian}</td>
+                        <td>{xp}</td>
                     </tr>
                     """
                 )
@@ -901,7 +906,7 @@ def dashboard_page() -> None:
                                 </tr>
                             </thead>
                             <tbody>
-                                {''.join(rows_html)}
+                                {''.join(leaderboard_rows)}
                             </tbody>
                         </table>
                     </div>
