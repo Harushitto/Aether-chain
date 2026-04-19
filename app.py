@@ -623,7 +623,7 @@ def get_recent_deed_feed(session: Session, limit: int = 12) -> list[str]:
     feed = []
     for row in rows:
         username = str(row["USERNAME"] or "A Guardian").strip()
-        action = str(row["ACTION_CONTEXT"] or "made a green impact").strip()
+        action = normalize_action_context(str(row["ACTION_CONTEXT"] or "made a green impact").strip())
         feed.append(f"{username} has just {action}!")
     return feed
 
@@ -832,10 +832,10 @@ if "submitted_upload_keys" not in st.session_state:
     st.session_state.submitted_upload_keys = set()
 if "announcement_index" not in st.session_state:
     st.session_state.announcement_index = 0
-if "announcement_last_switch_time" not in st.session_state:
-    st.session_state.announcement_last_switch_time = time.time()
-if "announcement_show_message" not in st.session_state:
-    st.session_state.announcement_show_message = True
+if "last_update_time" not in st.session_state:
+    st.session_state.last_update_time = time.time()
+if "is_visible" not in st.session_state:
+    st.session_state.is_visible = True
 
 
 # ============================================================================
@@ -969,22 +969,23 @@ def dashboard_page() -> None:
             "A Guardian has just cleaned up a riverbank!",
         ]
 
+    deed_updates = [normalize_action_context(update) for update in deed_updates]
     if st.session_state.announcement_index >= len(deed_updates):
         st.session_state.announcement_index = 0
 
     current_time = time.time()
-    elapsed = current_time - st.session_state.announcement_last_switch_time
+    elapsed = current_time - st.session_state.last_update_time
 
-    if st.session_state.announcement_show_message and elapsed > 5:
-        st.session_state.announcement_show_message = False
-        st.session_state.announcement_last_switch_time = current_time
-    elif not st.session_state.announcement_show_message and elapsed > 4:
-        st.session_state.announcement_show_message = True
-        st.session_state.announcement_last_switch_time = current_time
+    if st.session_state.is_visible and elapsed >= 5:
+        st.session_state.is_visible = False
+        st.session_state.last_update_time = current_time
+    elif not st.session_state.is_visible and elapsed >= 4:
+        st.session_state.is_visible = True
+        st.session_state.last_update_time = current_time
         st.session_state.announcement_index = (st.session_state.announcement_index + 1) % len(deed_updates)
 
     announcement_placeholder = st.empty()
-    if st.session_state.announcement_show_message:
+    if st.session_state.is_visible:
         current_announcement = html.escape(deed_updates[st.session_state.announcement_index])
         announcement_placeholder.markdown(
             f"""
@@ -995,19 +996,12 @@ def dashboard_page() -> None:
             unsafe_allow_html=True,
         )
     else:
-        announcement_placeholder.markdown(
-            """
-            <div class="deed-ticker">
-                <div class="deed-ticker-track announcement-empty">&nbsp;</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        announcement_placeholder.empty()
 
-    cycle_seconds = 5 if st.session_state.announcement_show_message else 4
+    cycle_seconds = 5 if st.session_state.is_visible else 4
     ms_until_switch = max(
         300,
-        int((cycle_seconds - (time.time() - st.session_state.announcement_last_switch_time)) * 1000),
+        int((cycle_seconds - (time.time() - st.session_state.last_update_time)) * 1000),
     )
     components_html(
         f"""
