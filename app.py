@@ -1,5 +1,7 @@
 import re
 import hashlib
+import html
+import time
 from typing import Optional
 
 import google.generativeai as genai
@@ -82,6 +84,15 @@ st.markdown(
         transform: translateY(-2px);
     }
 
+    .stButton > button[kind="primary"]:hover {
+        box-shadow: 0 0 18px rgba(45, 185, 104, 0.95), 0 0 32px rgba(26, 143, 79, 0.7);
+        filter: brightness(1.08);
+    }
+
+    .stButton > button[kind="primary"] {
+        animation: pulse-glow 2.4s ease-in-out infinite;
+    }
+
     .stTextInput > div > div > input,
     .stTextArea > div > div > textarea {
         background-color: #0f3018 !important;
@@ -154,14 +165,121 @@ st.markdown(
         width: 100%;
     }
 
+    .deed-ticker {
+        overflow: hidden;
+        white-space: nowrap;
+        width: 100%;
+        margin: 16px 0 22px;
+        border: 1px solid rgba(45, 185, 104, 0.65);
+        border-radius: 12px;
+        background: rgba(8, 28, 15, 0.68);
+        box-shadow: 0 0 12px rgba(45, 185, 104, 0.25);
+        padding: 10px 0;
+    }
+
+    .deed-ticker-track {
+        display: inline-block;
+        padding-left: 100%;
+        animation: marquee 24s linear infinite;
+        color: #b5ffcb;
+        font-weight: 700;
+        text-shadow: 0 0 10px #2db968, 0 0 20px #1a8f4f;
+    }
+
     .marquee-text {
         display: inline-block;
         padding-left: 100%;
         animation: marquee 20s linear infinite;
     }
 
+    .step-card {
+        border: 1px solid rgba(45, 185, 104, 0.8) !important;
+        box-shadow: 0 0 12px rgba(45, 185, 104, 0.18);
+        padding: 18px !important;
+    }
+
+    .botanical-card {
+        background-image:
+            linear-gradient(rgba(15, 48, 24, 0.84), rgba(15, 48, 24, 0.84)),
+            url("https://www.transparenttextures.com/patterns/leaves.png");
+        background-color: rgba(15, 48, 24, 0.8);
+        background-size: auto, 240px 240px;
+        background-repeat: repeat;
+        backdrop-filter: blur(2px);
+    }
+
+    .nature-panel {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid rgba(45, 185, 104, 0.45);
+        border-radius: 14px;
+        padding: 20px;
+        margin-top: 18px;
+        background:
+            linear-gradient(135deg, rgba(9, 27, 16, 0.85), rgba(16, 62, 32, 0.7)),
+            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220' viewBox='0 0 220 220'%3E%3Cg fill='none' stroke='%233ecf78' stroke-opacity='0.2' stroke-width='1.2'%3E%3Cpath d='M30 192c38-42 68-100 72-164'/%3E%3Cpath d='M108 174c20-24 40-58 46-102'/%3E%3Cpath d='M24 138c16-8 28-22 38-38'/%3E%3Cpath d='M130 126c16-12 22-26 28-46'/%3E%3C/g%3E%3C/svg%3E");
+        background-size: cover, 220px 220px;
+        backdrop-filter: blur(3px);
+    }
+
+    .leaderboard-shell {
+        border-radius: 16px;
+        padding: 10px;
+        background: rgba(14, 44, 24, 0.4);
+        border: 1px solid rgba(115, 255, 170, 0.25);
+        box-shadow: inset 0 0 0 1px rgba(16, 82, 40, 0.5), 0 8px 28px rgba(0, 0, 0, 0.25);
+        backdrop-filter: blur(10px);
+    }
+
+    .leaderboard-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0 10px;
+    }
+
+    .leaderboard-table thead th {
+        color: #7ef0ac;
+        text-align: left;
+        font-size: 0.9rem;
+        padding: 6px 12px 10px;
+    }
+
+    .leaderboard-table tbody tr {
+        background: rgba(7, 26, 14, 0.65);
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .leaderboard-table tbody td {
+        padding: 12px;
+        border-top: 1px solid rgba(80, 209, 130, 0.2);
+        border-bottom: 1px solid rgba(80, 209, 130, 0.2);
+    }
+
+    .leaderboard-table tbody td:first-child {
+        border-left: 4px solid rgba(80, 209, 130, 0.35);
+        border-top-left-radius: 12px;
+        border-bottom-left-radius: 12px;
+        width: 70px;
+        font-weight: 700;
+    }
+
+    .leaderboard-table tbody td:last-child {
+        border-right: 1px solid rgba(80, 209, 130, 0.2);
+        border-top-right-radius: 12px;
+        border-bottom-right-radius: 12px;
+        color: #46ff99;
+        font-weight: 800;
+        text-shadow: 0 0 8px rgba(45, 185, 104, 0.45);
+    }
+
+    .leaderboard-table tbody tr.rank-1 td:first-child { border-left-color: #d4af37; }
+    .leaderboard-table tbody tr.rank-2 td:first-child { border-left-color: #c0c0c0; }
+    .leaderboard-table tbody tr.rank-3 td:first-child { border-left-color: #cd7f32; }
+
     .success-modal {
         animation: modal-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        box-shadow: 0 0 16px rgba(45, 185, 104, 0.65), 0 0 32px rgba(26, 143, 79, 0.35);
     }
 
     hr {
@@ -182,6 +300,17 @@ st.markdown(
         100% {
             opacity: 1;
             transform: scale(1);
+        }
+    }
+
+    @keyframes pulse-glow {
+        0%, 100% {
+            box-shadow: 0 4px 15px rgba(45, 185, 104, 0.35);
+            transform: translateY(0);
+        }
+        50% {
+            box-shadow: 0 0 18px rgba(45, 185, 104, 0.75), 0 0 30px rgba(26, 143, 79, 0.45);
+            transform: translateY(-1px);
         }
     }
 </style>
@@ -228,6 +357,11 @@ def create_snowflake_session() -> Session:
 
 def get_leaderboard_df(session: Session):
     return session.table(LEADERBOARD_TABLE)
+
+
+def get_leaderboard_columns(session: Session) -> set[str]:
+    """Return uppercase column names currently available on the leaderboard table."""
+    return {name.upper() for name in get_leaderboard_df(session).columns}
 
 
 def user_exists(session: Session, username: str) -> bool:
@@ -285,16 +419,26 @@ def record_deed(
     image_hash: Optional[str],
 ) -> None:
     """Record a deed verification result to Snowflake safely."""
-    row_df = session.create_dataframe(
-        [[username, wallet_address, points, deed_type, action_context, image_hash, None]],
-        schema=LEADERBOARD_SCHEMA,
-    )
+    columns = get_leaderboard_columns(session)
+    if "IMAGE_HASH" in columns:
+        values = [username, wallet_address, points, deed_type, action_context, image_hash, None]
+        schema = LEADERBOARD_SCHEMA
+    else:
+        values = [username, wallet_address, points, deed_type, action_context, None]
+        schema = [col for col in LEADERBOARD_SCHEMA if col != "IMAGE_HASH"]
+
+    row_df = session.create_dataframe([values], schema=schema)
     row_df = row_df.with_column("CREATED_AT", F.current_timestamp())
     row_df.write.mode("append").save_as_table(LEADERBOARD_TABLE)
 
 
 def deed_image_already_submitted(session: Session, username: str, image_hash: str) -> bool:
     """Check whether the user has already submitted the same image hash."""
+    columns = get_leaderboard_columns(session)
+    if "IMAGE_HASH" not in columns:
+        # Backward-compatible path for older table schemas that predate IMAGE_HASH.
+        return False
+
     count = (
         get_leaderboard_df(session)
         .filter(F.upper(F.col("USERNAME")) == F.lit(username.upper()))
@@ -430,6 +574,10 @@ if "daily_wisdom" not in st.session_state:
     st.session_state.daily_wisdom = None
 if "last_processed_submission_key" not in st.session_state:
     st.session_state.last_processed_submission_key = None
+if "deed_alert_text" not in st.session_state:
+    st.session_state.deed_alert_text = ""
+if "deed_alert_time" not in st.session_state:
+    st.session_state.deed_alert_time = 0.0
 
 
 # ============================================================================
@@ -533,12 +681,30 @@ def dashboard_page() -> None:
     """,
         unsafe_allow_html=True,
     )
+    deed_alert_placeholder = st.empty()
+    alert_is_fresh = (
+        bool(st.session_state.deed_alert_text)
+        and (time.time() - st.session_state.deed_alert_time) <= 10
+    )
+    if alert_is_fresh:
+        deed_alert_placeholder.markdown(
+            f"""
+            <div class="deed-ticker">
+                <div class="deed-ticker-track">🌿 {st.session_state.deed_alert_text}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        st.session_state.deed_alert_text = ""
+        st.session_state.deed_alert_time = 0.0
+        deed_alert_placeholder.empty()
 
     st.markdown("### 🌍 Submit Your Environmental Deed")
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown('<div class="card-container">', unsafe_allow_html=True)
+        st.markdown('<div class="card-container step-card botanical-card">', unsafe_allow_html=True)
         st.markdown("**Step 1: Describe Your Action**")
         action_context = st.text_area(
             "What environmental action did you take?",
@@ -549,7 +715,7 @@ def dashboard_page() -> None:
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col2:
-        st.markdown('<div class="card-container">', unsafe_allow_html=True)
+        st.markdown('<div class="card-container step-card botanical-card">', unsafe_allow_html=True)
         st.markdown("**Step 2: Upload Proof**")
         uploaded_file = st.file_uploader(
             "📸 Upload image or video proof",
@@ -610,6 +776,10 @@ def dashboard_page() -> None:
                         )
 
                         if verified:
+                            st.session_state.deed_alert_text = (
+                                f"{html.escape(st.session_state.username)} has just {html.escape(action_context)}!"
+                            )
+                            st.session_state.deed_alert_time = time.time()
                             st.markdown(
                                 f"""
                                 <div class="success-modal card-container" style="border: 2px solid #2db968; background: linear-gradient(135deg, #0f3018 0%, #1a8f4f20 100%);">
@@ -689,24 +859,78 @@ def dashboard_page() -> None:
     try:
         df = (
             get_leaderboard_df(session)
-            .group_by("USERNAME")
-            .agg(F.sum(F.col("POINTS")).alias("TOTAL_XP"))
+            .select(
+                F.upper(F.col("USERNAME")).alias("GUARDIAN"),
+                F.coalesce(F.col("POINTS").cast("INTEGER"), F.lit(0)).alias("POINTS_INT"),
+            )
+            .group_by("GUARDIAN")
+            .agg(F.sum(F.col("POINTS_INT")).alias("TOTAL_XP"))
             .sort(F.col("TOTAL_XP").desc())
             .limit(20)
             .to_pandas()
         )
 
         if not df.empty:
-            df.columns = ["Guardian", "Total XP"]
-            df.insert(0, "Rank", range(1, len(df) + 1))
+            df["TOTAL_XP"] = pd.to_numeric(df["TOTAL_XP"], errors="coerce").fillna(0).astype(int)
+            df["Rank"] = range(1, len(df) + 1)
+            display_df = df.rename(columns={"GUARDIAN": "Guardian", "TOTAL_XP": "Total XP"})[["Rank", "Guardian", "Total XP"]]
+            rows_html = []
+            for _, row in display_df.iterrows():
+                rank = int(row["Rank"])
+                rank_class = f"rank-{rank}" if rank <= 3 else ""
+                rows_html.append(
+                    f"""
+                    <tr class="{rank_class}">
+                        <td>#{rank}</td>
+                        <td>{html.escape(str(row["Guardian"]))}</td>
+                        <td>{int(row["Total XP"])} XP</td>
+                    </tr>
+                    """
+                )
 
-            st.markdown('<div class="card-container">', unsafe_allow_html=True)
-            st.dataframe(df, use_container_width=True, hide_index=True)
-            st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown(
+                f"""
+                <div class="nature-panel">
+                    <div class="leaderboard-shell">
+                        <table class="leaderboard-table">
+                            <thead>
+                                <tr>
+                                    <th>Rank</th>
+                                    <th>Guardian</th>
+                                    <th>Total XP</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {''.join(rows_html)}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
         else:
-            st.info("🌱 Be the first to verify a deed and top the leaderboard!")
+            st.markdown(
+                """
+                <div class="nature-panel">
+                    <div class="card-container" style="margin: 0;">
+                        🌱 Be the first to verify a deed and top the leaderboard!
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
     except Exception:
-        st.info("📊 Leaderboard is being initialized. Check back soon!")
+        st.markdown(
+            """
+            <div class="nature-panel">
+                <div class="card-container" style="margin: 0;">
+                    📊 Leaderboard is being initialized. Check back soon!
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 # ============================================================================
