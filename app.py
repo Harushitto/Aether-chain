@@ -4,6 +4,7 @@ import html
 import random
 import time
 import textwrap
+import base64
 from typing import Optional
 
 import google.generativeai as genai
@@ -407,6 +408,42 @@ st.markdown(
     .leaderboard-table tbody tr.rank-2 td:first-child { border-left-color: #c0c0c0; }
     .leaderboard-table tbody tr.rank-3 td:first-child { border-left-color: #cd7f32; }
 
+    .profile-icon-wrap {
+        position: fixed;
+        top: 20px;
+        right: 22px;
+        z-index: 999;
+    }
+
+    .profile-icon-wrap button {
+        width: 62px !important;
+        height: 62px !important;
+        border-radius: 50% !important;
+        border: 2px solid var(--accent-green) !important;
+        box-shadow: 0 0 10px var(--accent-green) !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        background: var(--card-bg) !important;
+    }
+
+    .profile-dashboard-shell {
+        background: var(--card-bg);
+        border: 1px solid var(--accent-green);
+        border-radius: 16px;
+        padding: 16px;
+        box-shadow: 0 0 16px rgba(45, 185, 104, 0.45);
+        margin-bottom: 16px;
+    }
+
+    .dashboard-avatar {
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        border: 2px solid var(--accent-green);
+        box-shadow: 0 0 10px var(--accent-green);
+        object-fit: cover;
+    }
+
     .success-modal {
         animation: modal-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
         border: 1px solid rgba(115, 255, 170, 0.95);
@@ -496,6 +533,7 @@ LEADERBOARD_INSERT_SCHEMA = [
     "ACTION_CONTEXT",
     "IMAGE_HASH",
 ]
+DEFAULT_PROFILE_AVATAR = "https://api.dicebear.com/9.x/bottts-neutral/svg?seed=NatureGuardian"
 COMMON_DEED_TYPO_CORRECTIONS = {
     "panted": "planted",
     "planed": "planted",
@@ -621,6 +659,81 @@ def get_username_by_wallet_address(session: Session, wallet_address: str) -> Opt
     return str(rows[0]["USERNAME"]).strip() if rows[0]["USERNAME"] else None
 
 
+def wallet_has_profile_row(session: Session, wallet_address: str) -> bool:
+    """Return whether this wallet already has a USER_CREATED profile row."""
+    count = (
+        get_leaderboard_df(session)
+        .filter(F.upper(F.col("WALLET_ADDRESS")) == F.lit(wallet_address.upper()))
+        .filter(F.upper(F.col("DEED_TYPE")) == F.lit("USER_CREATED"))
+        .count()
+    )
+    return count > 0
+
+
+def ensure_profile_row_exists(session: Session, username: str, wallet_address: str) -> None:
+    """Ensure a dedicated USER_CREATED row exists for profile-level updates."""
+    if wallet_has_profile_row(session, wallet_address):
+        return
+    insert_leaderboard_row(
+        session,
+        {
+            "USERNAME": username,
+            "WALLET_ADDRESS": wallet_address,
+            "POINTS": 0,
+            "DEED_TYPE": "USER_CREATED",
+            "ACTION_CONTEXT": "Guardian joined Aether-Chain",
+            "IMAGE_HASH": None,
+        },
+    )
+
+
+def get_wallet_profile_image_hash(session: Session, wallet_address: str) -> Optional[str]:
+    """Get the profile avatar hash/url token from the wallet's profile row."""
+    rows = (
+        get_leaderboard_df(session)
+        .filter(F.upper(F.col("WALLET_ADDRESS")) == F.lit(wallet_address.upper()))
+        .filter(F.upper(F.col("DEED_TYPE")) == F.lit("USER_CREATED"))
+        .select("IMAGE_HASH")
+        .limit(1)
+        .collect()
+    )
+    if not rows:
+        return None
+    return str(rows[0]["IMAGE_HASH"]).strip() if rows[0]["IMAGE_HASH"] else None
+
+
+def update_wallet_profile(
+    session: Session,
+    wallet_address: str,
+    username: Optional[str] = None,
+    profile_image_ref: Optional[str] = None,
+) -> None:
+    """Update wallet profile fields in Snowflake on the USER_CREATED row."""
+    current_username = get_username_by_wallet_address(session, wallet_address) or "Guardian"
+    ensure_profile_row_exists(session, current_username, wallet_address)
+
+    safe_wallet = wallet_address.replace("'", "''")
+    if username is not None:
+        safe_username = username.replace("'", "''")
+        session.sql(
+            f"""
+            UPDATE {LEADERBOARD_TABLE}
+            SET USERNAME = '{safe_username}'
+            WHERE UPPER(WALLET_ADDRESS) = UPPER('{safe_wallet}')
+            """
+        ).collect()
+    if profile_image_ref is not None:
+        safe_ref = profile_image_ref.replace("'", "''")
+        session.sql(
+            f"""
+            UPDATE {LEADERBOARD_TABLE}
+            SET IMAGE_HASH = '{safe_ref}'
+            WHERE UPPER(WALLET_ADDRESS) = UPPER('{safe_wallet}')
+              AND UPPER(DEED_TYPE) = 'USER_CREATED'
+            """
+        ).collect()
+
+
 def generate_username_suggestions(
     chosen_name: str,
     wallet_address: str,
@@ -650,21 +763,8 @@ def generate_username_suggestions(
 
 def create_user_entry(session: Session, username: str, wallet_address: str) -> None:
     """Create a new user entry in the leaderboard if they don't exist."""
-    if user_exists(session, username):
-        return
-
     try:
-        insert_leaderboard_row(
-            session,
-            {
-                "USERNAME": username,
-                "WALLET_ADDRESS": wallet_address,
-                "POINTS": 0,
-                "DEED_TYPE": "USER_CREATED",
-                "ACTION_CONTEXT": "Guardian joined Aether-Chain",
-                "IMAGE_HASH": None,
-            },
-        )
+        ensure_profile_row_exists(session, username, wallet_address)
     except Exception as exc:
         raise RuntimeError("Unable to sync your profile to Snowflake right now.") from exc
 
@@ -922,13 +1022,23 @@ if "submitted_upload_keys" not in st.session_state:
     st.session_state.submitted_upload_keys = set()
 if "user_xp" not in st.session_state:
     st.session_state.user_xp = 0
+if "needs_username_registration" not in st.session_state:
+    st.session_state.needs_username_registration = False
+if "wallet_lookup_complete" not in st.session_state:
+    st.session_state.wallet_lookup_complete = False
+if "profile_edit_mode" not in st.session_state:
+    st.session_state.profile_edit_mode = False
+if "profile_image_ref" not in st.session_state:
+    st.session_state.profile_image_ref = None
+if "profile_image_preview" not in st.session_state:
+    st.session_state.profile_image_preview = None
 
 
 # ============================================================================
 # 7. LOGIN PAGE
 # ============================================================================
 def complete_manual_login(wallet_address: str, username: str) -> None:
-    """Complete manual login flow after wallet + username validation."""
+    """Complete login/registration flow after wallet + username validation."""
     wallet_address = wallet_address.strip()
     username = username.strip()
 
@@ -959,8 +1069,12 @@ def complete_manual_login(wallet_address: str, username: str) -> None:
 
         st.session_state.wallet_address = wallet_address
         st.session_state.username = existing_wallet_username or username
+        st.session_state.profile_image_ref = get_wallet_profile_image_hash(session, wallet_address)
+        st.session_state.profile_image_preview = None
         st.session_state.user_xp = get_user_total_points(session, st.session_state.username)
         st.session_state.logged_in = True
+        st.session_state.needs_username_registration = False
+        st.session_state.wallet_lookup_complete = False
         st.session_state.daily_wisdom = generate_daily_wisdom()
         st.rerun()
     except Exception:
@@ -971,7 +1085,7 @@ def complete_manual_login(wallet_address: str, username: str) -> None:
 
 
 def login_page() -> None:
-    """Render the manual-first authentication page."""
+    """Render smart check-in authentication page."""
     col1, col2, col3 = st.columns([1, 2, 1])
 
     with col2:
@@ -992,38 +1106,64 @@ def login_page() -> None:
             """
             <div class="card-container step-card botanical-step login-header-card">
                 <h3>Welcome, Guardian!</h3>
-                <p>Enter your Wallet ID and choose a unique username to begin your journey.</p>
+                <p>Enter your Wallet ID for smart check-in. Returning guardians skip registration.</p>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
         st.markdown('<div class="card-container">', unsafe_allow_html=True)
-        st.markdown("#### 🔐 Manual Identification")
+        st.markdown("#### 🔐 Smart Check-In")
 
         manual_wallet_input = st.text_input(
             "Wallet ID",
             key="manual_wallet_input",
             placeholder="e.g. 9xQeWvG816bUx9EPfPy...",
         )
-        manual_username_input = st.text_input(
-            "Username",
-            key="manual_username_input",
-            placeholder="Choose a unique username",
-        )
-        manual_submit = st.button("Continue", use_container_width=True)
+        manual_submit = st.button("Continue", use_container_width=True, key="wallet_lookup_continue")
 
         if manual_submit:
             submitted_wallet = manual_wallet_input.strip()
-            submitted_username = manual_username_input.strip()
             if not submitted_wallet:
                 st.error("Please enter your Wallet ID before submitting.")
             elif not SOLANA_WALLET_PATTERN.fullmatch(submitted_wallet):
                 st.error("Invalid Solana Wallet ID format.")
-            elif not submitted_username:
-                st.error("Please enter a Username before submitting.")
             else:
-                complete_manual_login(submitted_wallet, submitted_username)
+                try:
+                    session = create_snowflake_session()
+                    existing_wallet_username = get_username_by_wallet_address(session, submitted_wallet)
+                    if existing_wallet_username:
+                        st.session_state.wallet_address = submitted_wallet
+                        st.session_state.username = existing_wallet_username
+                        st.session_state.profile_image_ref = get_wallet_profile_image_hash(session, submitted_wallet)
+                        st.session_state.profile_image_preview = None
+                        st.session_state.user_xp = get_user_total_points(session, existing_wallet_username)
+                        st.session_state.logged_in = True
+                        st.session_state.needs_username_registration = False
+                        st.session_state.wallet_lookup_complete = False
+                        st.session_state.daily_wisdom = generate_daily_wisdom()
+                        st.success("Existing guardian found. Redirecting now...")
+                        st.rerun()
+                    else:
+                        st.session_state.wallet_address = submitted_wallet
+                        st.session_state.wallet_lookup_complete = True
+                        st.session_state.needs_username_registration = True
+                except Exception:
+                    st.error("We couldn't check your wallet in Snowflake right now. Please try again.")
+
+        if st.session_state.wallet_lookup_complete and st.session_state.needs_username_registration:
+            st.info("New wallet detected. Register your Guardian Name.")
+            registration_username = st.text_input(
+                "Register Guardian Name",
+                key="register_guardian_name",
+                placeholder="Choose a unique guardian name",
+            )
+            if st.button("Register & Enter", use_container_width=True, key="register_guardian_submit"):
+                candidate_name = registration_username.strip()
+                if not candidate_name:
+                    st.error("Please enter a Guardian Name before continuing.")
+                else:
+                    complete_manual_login(st.session_state.wallet_address or "", candidate_name)
 
         wallet_address = (st.session_state.wallet_address or "").strip()
 
@@ -1032,7 +1172,7 @@ def login_page() -> None:
             st.caption(f"Username: {st.session_state.username}")
             st.info("Finalizing login…")
         else:
-            st.info("Enter your wallet ID and a unique username to continue.")
+            st.info("Enter your wallet ID to begin.")
 
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1040,9 +1180,113 @@ def login_page() -> None:
 # ============================================================================
 # 8. DASHBOARD PAGE
 # ============================================================================
+def _profile_avatar_data_uri() -> str:
+    """Return data URI for circular icon/avatar image."""
+    if st.session_state.profile_image_preview:
+        return st.session_state.profile_image_preview
+    profile_ref = (st.session_state.profile_image_ref or "").strip()
+    if profile_ref.startswith("profile:sha256:"):
+        return DEFAULT_PROFILE_AVATAR
+    return profile_ref or DEFAULT_PROFILE_AVATAR
+
+
+def render_profile_dashboard(session: Session) -> None:
+    """Top-right circular profile icon and editable dashboard."""
+    icon_src = _profile_avatar_data_uri()
+    st.markdown('<div class="profile-icon-wrap">', unsafe_allow_html=True)
+    with st.popover("🧑‍🌿", use_container_width=False):
+        st.markdown(
+            '<div class="profile-dashboard-shell"><h3>🌿 Guardian Dashboard</h3></div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            f'<img src="{html.escape(icon_src)}" class="dashboard-avatar" alt="guardian avatar">',
+            unsafe_allow_html=True,
+        )
+        st.caption("Nature Guardian Avatar")
+        st.text_input("Wallet ID", value=st.session_state.wallet_address or "", disabled=True)
+
+        username_col, action_col = st.columns([3, 1])
+        with username_col:
+            current_name = st.text_input(
+                "Guardian Name",
+                value=st.session_state.username or "",
+                key="profile_username_display",
+                disabled=not st.session_state.profile_edit_mode,
+            )
+        with action_col:
+            if st.button("Edit", key="profile_edit_toggle", use_container_width=True):
+                st.session_state.profile_edit_mode = not st.session_state.profile_edit_mode
+                st.rerun()
+
+        if st.session_state.profile_edit_mode and st.button("Check & Save Name", key="save_profile_name"):
+            candidate = current_name.strip()
+            if not candidate:
+                st.error("Guardian Name cannot be empty.")
+            elif not re.fullmatch(r"^[A-Za-z0-9_]{3,32}$", candidate):
+                st.error("Use 3-32 letters, numbers, or underscore only.")
+            else:
+                existing_usernames = get_existing_usernames(session)
+                if (
+                    candidate.upper() in existing_usernames
+                    and candidate.upper() != (st.session_state.username or "").upper()
+                ):
+                    st.warning("That Guardian Name is already taken.")
+                    suggestions = generate_username_suggestions(
+                        candidate,
+                        st.session_state.wallet_address or "",
+                        existing_usernames,
+                    )
+                    if suggestions:
+                        st.info("Available alternatives: " + ", ".join(suggestions))
+                else:
+                    update_wallet_profile(
+                        session,
+                        st.session_state.wallet_address or "",
+                        username=candidate,
+                    )
+                    st.session_state.username = candidate
+                    st.session_state.profile_edit_mode = False
+                    st.success("Guardian Name updated in Snowflake.")
+                    st.rerun()
+
+        st.markdown("##### Update Profile Picture")
+        profile_upload = st.file_uploader(
+            "Upload profile image",
+            type=["jpg", "jpeg", "png"],
+            key="profile_image_upload",
+        )
+        if profile_upload is not None and st.button("Save Profile Picture", key="save_profile_picture"):
+            file_bytes = profile_upload.getvalue()
+            uploaded_hash = compute_image_hash(file_bytes)
+            profile_token = f"profile:sha256:{uploaded_hash}"
+            mime = profile_upload.type or "image/png"
+            preview_uri = f"data:{mime};base64,{base64.b64encode(file_bytes).decode('utf-8')}"
+            update_wallet_profile(
+                session,
+                st.session_state.wallet_address or "",
+                profile_image_ref=profile_token,
+            )
+            st.session_state.profile_image_ref = profile_token
+            st.session_state.profile_image_preview = preview_uri
+            st.success("Profile picture hash synced to Snowflake.")
+            st.rerun()
+
+        if st.button("🚪 Logout", use_container_width=True, key="profile_logout"):
+            st.session_state.logged_in = False
+            st.session_state.username = None
+            st.session_state.wallet_address = None
+            st.session_state.profile_image_ref = None
+            st.session_state.profile_image_preview = None
+            st.session_state.profile_edit_mode = False
+            st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
 def dashboard_page() -> None:
     """Render the main dashboard after login."""
     session = create_snowflake_session()
+    render_profile_dashboard(session)
     now_ts = time.time()
     if (
         st.session_state.deed_alert_text
@@ -1051,14 +1295,6 @@ def dashboard_page() -> None:
     ):
         st.session_state.deed_alert_text = ""
         st.session_state.deed_alert_time = 0.0
-
-    col1, col2, col3 = st.columns([3, 1, 1])
-    with col3:
-        if st.button("🚪 Logout", use_container_width=True):
-            st.session_state.logged_in = False
-            st.session_state.username = None
-            st.session_state.wallet_address = None
-            st.rerun()
 
     st.markdown(
         """
