@@ -631,6 +631,11 @@ def deed_image_already_submitted(session: Session, username: str, image_hash: st
     return count > 0
 
 
+def compute_image_hash(file_bytes: bytes) -> str:
+    """Return deterministic SHA-256 hash for uploaded image bytes."""
+    return hashlib.sha256(file_bytes).hexdigest()
+
+
 # ============================================================================
 # 5. AI UTILITIES
 # ============================================================================
@@ -775,6 +780,8 @@ if "last_awarded_points" not in st.session_state:
     st.session_state.last_awarded_points = 0
 if "last_award_time" not in st.session_state:
     st.session_state.last_award_time = 0.0
+if "submitted_upload_keys" not in st.session_state:
+    st.session_state.submitted_upload_keys = set()
 
 
 # ============================================================================
@@ -972,12 +979,15 @@ def dashboard_page() -> None:
             st.info("🎬 Video uploaded. Current verifier supports images only; please upload a representative image.")
 
         file_bytes = uploaded_file.getvalue()
-        image_hash = hashlib.sha256(file_bytes).hexdigest()
+        image_hash = compute_image_hash(file_bytes)
         submission_key = (
             f"{st.session_state.username}:{uploaded_file.name}:{len(file_bytes)}:{image_hash}"
         )
 
-        if st.session_state.last_processed_submission_key == submission_key:
+        if (
+            st.session_state.last_processed_submission_key == submission_key
+            or submission_key in st.session_state.submitted_upload_keys
+        ):
             st.warning("⚠️ You have already submitted this specific upload in this session.")
 
         st.markdown('<div class="verify-button">', unsafe_allow_html=True)
@@ -985,7 +995,10 @@ def dashboard_page() -> None:
             "✅ Verify & Claim Rewards",
             type="primary",
             use_container_width=True,
-            disabled=st.session_state.last_processed_submission_key == submission_key,
+            disabled=(
+                st.session_state.last_processed_submission_key == submission_key
+                or submission_key in st.session_state.submitted_upload_keys
+            ),
         )
         st.markdown("</div>", unsafe_allow_html=True)
         if verify_clicked:
@@ -997,10 +1010,12 @@ def dashboard_page() -> None:
                         if deed_image_already_submitted(session, st.session_state.username, image_hash):
                             st.warning("⚠️ This image was already used for rewards. Upload a new deed photo.")
                             st.session_state.last_processed_submission_key = submission_key
+                            st.session_state.submitted_upload_keys.add(submission_key)
                             st.markdown("</div>", unsafe_allow_html=True)
                             return
 
                         st.session_state.last_processed_submission_key = submission_key
+                        st.session_state.submitted_upload_keys.add(submission_key)
                         img = Image.open(uploaded_file)
                         verified, points, analysis = verify_deed_with_gemini(img, action_context)
 
