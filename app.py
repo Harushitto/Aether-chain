@@ -75,7 +75,7 @@ SUMMARY: [Your summary]
 SUGGESTION: [Your suggestion]"""
 
                     # Call Gemini API
-                    model = genai.GenerativeModel("gemini-1.5-pro")
+                    model = genai.GenerativeModel("gemini-pro")
                     response = model.generate_content(prompt)
                     
                     # Display verification result
