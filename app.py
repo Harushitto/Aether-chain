@@ -264,6 +264,7 @@ st.markdown(
 
     .success-modal {
         animation: modal-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        box-shadow: 0 0 16px rgba(45, 185, 104, 0.65), 0 0 32px rgba(26, 143, 79, 0.35);
     }
 
     hr {
@@ -284,6 +285,17 @@ st.markdown(
         100% {
             opacity: 1;
             transform: scale(1);
+        }
+    }
+
+    @keyframes pulse-glow {
+        0%, 100% {
+            box-shadow: 0 4px 15px rgba(45, 185, 104, 0.35);
+            transform: translateY(0);
+        }
+        50% {
+            box-shadow: 0 0 18px rgba(45, 185, 104, 0.75), 0 0 30px rgba(26, 143, 79, 0.45);
+            transform: translateY(-1px);
         }
     }
 </style>
@@ -566,6 +578,10 @@ if "daily_wisdom" not in st.session_state:
     st.session_state.daily_wisdom = None
 if "last_processed_submission_key" not in st.session_state:
     st.session_state.last_processed_submission_key = None
+if "deed_alert_text" not in st.session_state:
+    st.session_state.deed_alert_text = ""
+if "deed_alert_time" not in st.session_state:
+    st.session_state.deed_alert_time = 0.0
 
 
 # ============================================================================
@@ -764,6 +780,10 @@ def dashboard_page() -> None:
                         )
 
                         if verified:
+                            st.session_state.deed_alert_text = (
+                                f"{html.escape(st.session_state.username)} has just {html.escape(action_context)}!"
+                            )
+                            st.session_state.deed_alert_time = time.time()
                             st.markdown(
                                 f"""
                                 <div class="success-modal card-container" style="border: 2px solid #2db968; background: linear-gradient(135deg, #0f3018 0%, #1a8f4f20 100%);">
@@ -843,8 +863,12 @@ def dashboard_page() -> None:
     try:
         df = (
             get_leaderboard_df(session)
-            .group_by("USERNAME")
-            .agg(F.sum(F.col("POINTS")).alias("TOTAL_XP"))
+            .select(
+                F.upper(F.col("USERNAME")).alias("GUARDIAN"),
+                F.coalesce(F.col("POINTS").cast("INTEGER"), F.lit(0)).alias("POINTS_INT"),
+            )
+            .group_by("GUARDIAN")
+            .agg(F.sum(F.col("POINTS_INT")).alias("TOTAL_XP"))
             .sort(F.col("TOTAL_XP").desc())
             .limit(20)
             .to_pandas()
