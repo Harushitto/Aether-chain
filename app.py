@@ -192,8 +192,26 @@ st.markdown("""
         border-color: #1a8f4f !important;
         margin: 30px 0 !important;
     }
-</style>
-""", unsafe_allow_html=True)
+    @keyframes marquee {
+        from { transform: translateX(0%); }
+        to { transform: translateX(-100%); }
+    }
+    .ticker-container {
+        overflow: hidden;
+        white-space: nowrap;
+        background: rgba(45, 185, 104, 0.1); 
+        padding: 10px 0;
+        width: 100%;
+    }
+    .marquee-text {
+        display: inline-block;
+        padding-left: 100%; 
+        animation: marquee 20s linear infinite;
+    }
+
+
+    </style>
+    """, unsafe_allow_html=True)
 
 # ============================================================================
 # 3. DATABASE UTILITIES
@@ -374,14 +392,13 @@ def dashboard_page():
     else:
         wisdom_text = "🌱 Welcome, Guardian! Upload your first green deed to start your journey."
 
-    st.markdown(f"""
+        st.markdown(f"""
         <div class="ticker-container">
-            💡 <strong>Aether-Chain Update:</strong><br>
-            "{wisdom_text}"
+            <div class="marquee-text">
+                💡 <strong>Aether-Chain Update:</strong> {wisdom_text}
+            </div>
         </div>
     """, unsafe_allow_html=True)
-    
-    
     # ========================================================================
     # ACTION SUBMISSION SECTION
     # ========================================================================
