@@ -648,24 +648,28 @@ def _sql_literal(value: Optional[object]) -> str:
 
 
 def insert_leaderboard_row(session: Session, row_payload: dict[str, Optional[object]]) -> None:
-    """Insert exactly the 6 expected non-generated columns into the leaderboard table."""
+    """Insert row payload into available leaderboard columns."""
     required_columns = LEADERBOARD_INSERT_SCHEMA
     existing_columns = get_leaderboard_columns(session)
-    missing_from_table = [col for col in required_columns if col not in existing_columns]
+    optional_columns = {"IMAGE_HASH"}
+    mandatory_columns = [col for col in required_columns if col not in optional_columns]
+
+    missing_from_table = [col for col in mandatory_columns if col not in existing_columns]
     if missing_from_table:
         raise RuntimeError(
             "CLIMATE_LEADERBOARD schema mismatch. Missing table columns: "
             + ", ".join(missing_from_table)
         )
 
-    missing_from_payload = [col for col in required_columns if col not in row_payload]
+    insert_columns = [col for col in required_columns if col in existing_columns]
+    missing_from_payload = [col for col in insert_columns if col not in row_payload]
     if missing_from_payload:
         raise RuntimeError(
             f"Insert payload missing required columns: {', '.join(missing_from_payload)}"
         )
 
-    values_sql = ", ".join(_sql_literal(row_payload[col]) for col in required_columns)
-    columns_sql = ", ".join(required_columns)
+    values_sql = ", ".join(_sql_literal(row_payload[col]) for col in insert_columns)
+    columns_sql = ", ".join(insert_columns)
     try:
         session.sql(
             f"INSERT INTO {LEADERBOARD_TABLE} ({columns_sql}) VALUES ({values_sql})"
@@ -927,10 +931,10 @@ def generate_daily_wisdom() -> str:
         return "🌍 Every action counts. Plant hope, harvest change. 🌱"
 
 
-def verify_deed_with_gemini(image: Image.Image, action_context: str) -> tuple[bool, int, str]:
+def verify_deed_with_gemini(image: Image.Image, action_context: str) -> tuple[bool, int, str, str]:
     """
     Verify deed using Gemini Vision API.
-    Returns: (is_verified: bool, points: int, analysis: str)
+    Returns: (is_verified: bool, points: int, impact_magnitude: str, analysis: str)
     """
     try:
         model_name = _get_supported_model()
@@ -938,6 +942,7 @@ def verify_deed_with_gemini(image: Image.Image, action_context: str) -> tuple[bo
             return (
                 False,
                 0,
+                "small",
                 "Error during verification: No Gemini model with generateContent support is available.",
             )
         model = genai.GenerativeModel(model_name)
@@ -982,9 +987,9 @@ def verify_deed_with_gemini(image: Image.Image, action_context: str) -> tuple[bo
             else "Analysis complete."
         )
 
-        return verified, points, analysis
+        return verified, points, impact, analysis
     except Exception as e:
-        return False, 0, f"Error during verification: {str(e)}"
+        return False, 0, "small", f"Error during verification: {str(e)}"
 
 
 # ============================================================================
@@ -1164,45 +1169,65 @@ def dashboard_page(session: Session) -> None:
         ):
             st.warning("⚠️ You have already submitted this specific upload in this session.")
 
-        if not is_image:
-            st.warning("⚠️ Please upload a JPG or PNG image for AI verification.")
-        elif (
-            st.session_state.last_processed_submission_key != submission_key
-            and submission_key not in st.session_state.submitted_upload_keys
-        ):
-            with st.spinner("🔍 Analyzing your deed with Gemini AI..."):
-                try:
-                    if deed_image_already_submitted(session, st.session_state.username, image_hash):
-                        st.warning("⚠️ This image was already used for rewards. Upload a new deed photo.")
+        analyze_clicked = st.button(
+            "✅ Analyze with AI & Record Deed",
+            type="primary",
+            use_container_width=True,
+            disabled=(
+                st.session_state.last_processed_submission_key == submission_key
+                or submission_key in st.session_state.submitted_upload_keys
+            ),
+        )
+
+        if analyze_clicked:
+            if not is_image:
+                st.warning("⚠️ Please upload a JPG or PNG image for AI verification.")
+            else:
+                with st.spinner("🔍 Analyzing your deed with Gemini AI..."):
+                    try:
+                        if deed_image_already_submitted(session, st.session_state.username, image_hash):
+                            st.warning("⚠️ This image was already used for rewards. Upload a new deed photo.")
+                            st.session_state.last_processed_submission_key = submission_key
+                            st.session_state.submitted_upload_keys.add(submission_key)
+                            st.markdown("</div>", unsafe_allow_html=True)
+                            return
+
                         st.session_state.last_processed_submission_key = submission_key
                         st.session_state.submitted_upload_keys.add(submission_key)
-                        st.markdown("</div>", unsafe_allow_html=True)
-                        return
+                        img = Image.open(uploaded_file)
+                        verified, points, impact_magnitude, analysis = verify_deed_with_gemini(img, action_context)
 
-                    st.session_state.last_processed_submission_key = submission_key
-                    st.session_state.submitted_upload_keys.add(submission_key)
-                    img = Image.open(uploaded_file)
-                    verified, points, analysis = verify_deed_with_gemini(img, action_context)
+                        deed_type = "Verified Deed" if verified else "Rejected Deed"
+                        record_deed(
+                            session,
+                            st.session_state.username,
+                            st.session_state.wallet_address,
+                            action_context,
+                            points,
+                            deed_type,
+                            image_hash,
+                        )
 
-                    deed_type = "Verified Deed" if verified else "Rejected Deed"
-                    record_deed(
-                        session,
-                        st.session_state.username,
-                        st.session_state.wallet_address,
-                        action_context,
-                        points,
-                        deed_type,
-                        image_hash,
-                    )
+                        eligibility = "Eligible for deed points ✅" if verified else "Not eligible for deed points ❌"
+                        deed_size = (
+                            "Large deed impact 🌳" if verified and impact_magnitude == "large"
+                            else "Small deed impact 🌱" if verified
+                            else "No impact points awarded"
+                        )
 
-                    if verified:
-                        st.success(f"✅ Deed verified and recorded. +{points} XP awarded.")
-                        st.balloons()
-                    else:
-                        st.warning("⚠️ Deed was analyzed but not verified for points.")
-                    st.info(f"🤖 **AI Analysis:** {analysis}")
-                except Exception as e:
-                    st.error(f"❌ Verification failed: {str(e)}")
+                        if verified:
+                            st.success(f"✅ Deed verified and recorded. +{points} XP awarded.")
+                            st.balloons()
+                        else:
+                            st.warning("⚠️ Deed analyzed but not verified for points.")
+
+                        st.info(
+                            f"🤖 **AI Analysis:** {analysis}\n\n"
+                            f"**Impact category:** {deed_size}\n\n"
+                            f"**Eligibility:** {eligibility}"
+                        )
+                    except Exception as e:
+                        st.error(f"❌ Verification failed: {str(e)}")
 
         st.markdown("</div>", unsafe_allow_html=True)
 
