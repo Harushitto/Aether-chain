@@ -19,8 +19,8 @@ from snowflake.snowpark import functions as F
 # 1. PAGE CONFIG & THEME
 # ============================================================================
 st.set_page_config(
-    page_title="ðŸŒ± Aether-Chain: Proof of Green",
-    page_icon="ðŸŒ±",
+    page_title="🌱 Aether-Chain: Proof of Green",
+    page_icon="🌱",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -123,7 +123,7 @@ st.markdown(
     .card-container {
         background-color: #0f3018;
         border: 2px solid #1a8f4f;
-        border-radius: 15px;
+        border-radius: 12px;
         padding: 20px;
         margin: 15px 0;
         box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
@@ -230,17 +230,6 @@ st.markdown(
         margin-bottom: 12px;
     }
 
-    .login-shell {
-        background: linear-gradient(145deg, rgba(10, 33, 19, 0.86), rgba(23, 77, 42, 0.45));
-        border: 1px solid rgba(126, 240, 172, 0.38);
-        border-radius: 15px;
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(45, 185, 104, 0.15);
-        max-width: 720px;
-        margin: 0 auto;
-    }
-
     .quote-banner {
         margin: 10px 0 20px;
         padding: 12px 16px;
@@ -267,118 +256,6 @@ st.markdown(
         border: 1px solid rgba(115, 255, 170, 0.4);
         padding: 22px;
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
-    }
-
-    .leaderboard-shell {
-        width: 100%;
-        background: linear-gradient(150deg, rgba(12, 42, 23, 0.88), rgba(17, 63, 34, 0.68));
-        border: 1px solid rgba(126, 240, 172, 0.35);
-        border-radius: 15px;
-        padding: 18px;
-        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.26);
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
-    }
-
-    .leaderboard-table {
-        width: 100%;
-        border-radius: 15px;
-        overflow: hidden;
-        border: 1px solid rgba(115, 255, 170, 0.22);
-    }
-
-    .leaderboard-header,
-    .leaderboard-row {
-        display: grid;
-        grid-template-columns: 0.9fr 1.8fr 2.8fr 2.5fr;
-        gap: 12px;
-        align-items: center;
-    }
-
-    .leaderboard-header {
-        background: linear-gradient(90deg, #2db968, #1a8f4f);
-        color: #f4fff8;
-        font-weight: 800;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        font-size: 0.86rem;
-        padding: 12px 14px;
-    }
-
-    .leaderboard-row {
-        margin-top: 8px;
-        padding: 12px 14px;
-        background: rgba(8, 27, 14, 0.74);
-        border: 1px solid rgba(115, 255, 170, 0.15);
-        border-radius: 12px;
-        transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
-    }
-
-    .leaderboard-row:hover {
-        transform: scale(1.02);
-        border-color: rgba(115, 255, 170, 0.5);
-        box-shadow: 0 10px 20px rgba(45, 185, 104, 0.2);
-    }
-
-    .leaderboard-row.rank-1 {
-        border-color: rgba(245, 214, 119, 0.95);
-        box-shadow: 0 0 16px rgba(245, 214, 119, 0.45);
-    }
-
-    .leaderboard-row.rank-2 {
-        border-color: rgba(209, 224, 237, 0.92);
-        box-shadow: 0 0 14px rgba(209, 224, 237, 0.35);
-    }
-
-    .leaderboard-row.rank-3 {
-        border-color: rgba(204, 143, 91, 0.95);
-        box-shadow: 0 0 14px rgba(204, 143, 91, 0.35);
-    }
-
-    .leaderboard-rank {
-        font-weight: 800;
-        font-size: 1rem;
-    }
-
-    .leaderboard-level {
-        color: #c7ffdd;
-        font-weight: 600;
-    }
-
-    .leaderboard-user {
-        font-family: 'Inter', 'Segoe UI', sans-serif;
-        font-weight: 800;
-        letter-spacing: 0.35px;
-    }
-
-    .points-wrap {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-    }
-
-    .leaderboard-points {
-        font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
-        font-weight: 700;
-        color: #eafff2;
-    }
-
-    .mini-progress-track {
-        width: 100%;
-        height: 7px;
-        border-radius: 999px;
-        background: rgba(126, 240, 172, 0.2);
-        overflow: hidden;
-    }
-
-    .mini-progress-fill {
-        height: 100%;
-        border-radius: 999px;
-        background: linear-gradient(90deg, #56df92 0%, #2db968 100%);
-    }
-
-    .verify-button {
-        animation: pulse-glow 2s ease-in-out infinite;
     }
 
     .title-pill {
@@ -1043,15 +920,15 @@ def generate_daily_wisdom() -> str:
     try:
         model_name = _get_supported_model()
         if not model_name:
-            return "ðŸŒ Every action counts. Plant hope, harvest change. ðŸŒ±"
+            return "🌍 Every action counts. Plant hope, harvest change. 🌱"
         model = genai.GenerativeModel(model_name)
         response = model.generate_content(
             "Generate a powerful, inspirational quote about saving Earth, nature, or greenery. "
             "Keep it to exactly 15 words maximum. Reply with ONLY the quote, no extra text."
         )
-        return (response.text or "").strip() or "ðŸŒ Every action counts. Plant hope, harvest change. ðŸŒ±"
+        return (response.text or "").strip() or "🌍 Every action counts. Plant hope, harvest change. 🌱"
     except Exception:
-        return "ðŸŒ Every action counts. Plant hope, harvest change. ðŸŒ±"
+        return "🌍 Every action counts. Plant hope, harvest change. 🌱"
 
 
 def verify_deed_with_gemini(image: Image.Image, action_context: str) -> tuple[bool, int, str, str]:
@@ -1158,10 +1035,10 @@ def login_page() -> None:
         st.markdown(
             """
         <h1 style="text-align: center; font-size: 2.5rem;">
-            ðŸŒ± Aether-Chain
+            🌱 Aether-Chain
         </h1>
         <p style="text-align: center; color: #2db968; font-size: 1.2rem; margin-bottom: 2rem;">
-            Proof of Green â€¢ On-Chain Environmental Impact
+            Proof of Green • On-Chain Environmental Impact
         </p>
         """,
             unsafe_allow_html=True,
@@ -1169,7 +1046,7 @@ def login_page() -> None:
 
         st.markdown(
             """
-            <div class="card-container step-card botanical-step login-header-card login-shell">
+            <div class="card-container step-card botanical-step login-header-card">
                 <h3>Welcome, Guardian!</h3>
                 <p>Create your manual session with a unique Username and your Solana Wallet ID.</p>
             </div>
@@ -1177,8 +1054,8 @@ def login_page() -> None:
             unsafe_allow_html=True,
         )
 
-        st.markdown('<div class="card-container login-shell">', unsafe_allow_html=True)
-        st.markdown("#### ðŸ” Login")
+        st.markdown('<div class="card-container">', unsafe_allow_html=True)
+        st.markdown("#### 🔐 Manual Login")
 
         with st.form("manual_login_form"):
             manual_username_input = st.text_input(
@@ -1202,7 +1079,7 @@ def login_page() -> None:
             st.warning("Unable to fetch username availability right now.")
 
         if username_input and username_input.upper() in existing_usernames:
-            st.error("âŒ Username already exists in CLIMATE_LEADERBOARD.")
+            st.error("❌ Username already exists in CLIMATE_LEADERBOARD.")
 
         if check_in_submit:
             if not username_input:
@@ -1240,14 +1117,14 @@ def dashboard_page(session: Session) -> None:
     st.markdown(
         """
     <h1 style="margin-bottom: 0.5rem;">
-        ðŸŒ± Aether-Chain: Proof of Green
+        🌱 Aether-Chain: Proof of Green
     </h1>
     """,
         unsafe_allow_html=True,
     )
     wisdom_text = (
         st.session_state.daily_wisdom
-        or "ðŸŒ± Welcome, Guardian! Upload your first green deed to start your journey."
+        or "🌱 Welcome, Guardian! Upload your first green deed to start your journey."
     )
     st.markdown(
         f"""
@@ -1257,7 +1134,7 @@ def dashboard_page(session: Session) -> None:
     """,
         unsafe_allow_html=True,
     )
-    st.markdown("### ðŸŒ Submit Your Environmental Deed")
+    st.markdown("### 🌍 Submit Your Environmental Deed")
     st.markdown('<div class="card-container">', unsafe_allow_html=True)
     raw_action_context = st.text_area(
         "What environmental action did you take?",
@@ -1266,7 +1143,7 @@ def dashboard_page(session: Session) -> None:
     ).strip()
     action_context = normalize_action_context(raw_action_context)
     uploaded_file = st.file_uploader(
-        "ðŸ“¸ Upload image evidence",
+        "📸 Upload image evidence",
         type=["jpg", "jpeg", "png"],
     )
     st.markdown("</div>", unsafe_allow_html=True)
@@ -1276,9 +1153,9 @@ def dashboard_page(session: Session) -> None:
 
         is_image = uploaded_file.type and uploaded_file.type.startswith("image")
         if is_image:
-            st.image(uploaded_file, caption="ðŸ“¸ Evidence Preview", width=300)
+            st.image(uploaded_file, caption="📸 Evidence Preview", width=300)
         else:
-            st.info("ðŸŽ¬ Video uploaded. Current verifier supports images only; please upload a representative image.")
+            st.info("🎬 Video uploaded. Current verifier supports images only; please upload a representative image.")
 
         file_bytes = uploaded_file.getvalue()
         image_hash = compute_image_hash(file_bytes)
@@ -1290,10 +1167,10 @@ def dashboard_page(session: Session) -> None:
             st.session_state.last_processed_submission_key == submission_key
             or submission_key in st.session_state.submitted_upload_keys
         ):
-            st.warning("âš ï¸ You have already submitted this specific upload in this session.")
+            st.warning("⚠️ You have already submitted this specific upload in this session.")
 
         analyze_clicked = st.button(
-            "âœ… Get Deed Points",
+            "✅ Analyze with AI & Record Deed",
             type="primary",
             use_container_width=True,
             disabled=(
@@ -1301,30 +1178,15 @@ def dashboard_page(session: Session) -> None:
                 or submission_key in st.session_state.submitted_upload_keys
             ),
         )
-        st.markdown(
-            """
-            <script>
-            (function () {
-                const buttons = window.parent.document.querySelectorAll('.stButton > button[kind="primary"]');
-                buttons.forEach((button) => {
-                    if (button.innerText && button.innerText.includes('Get Deed Points')) {
-                        button.classList.add('verify-button');
-                    }
-                });
-            })();
-            </script>
-            """,
-            unsafe_allow_html=True,
-        )
 
         if analyze_clicked:
             if not is_image:
-                st.warning("âš ï¸ Please upload a JPG or PNG image for AI verification.")
+                st.warning("⚠️ Please upload a JPG or PNG image for AI verification.")
             else:
-                with st.spinner("ðŸ” Analyzing your deed with Gemini AI..."):
+                with st.spinner("🔍 Analyzing your deed with Gemini AI..."):
                     try:
                         if deed_image_already_submitted(session, st.session_state.username, image_hash):
-                            st.warning("âš ï¸ This image was already used for rewards. Upload a new deed photo.")
+                            st.warning("⚠️ This image was already used for rewards. Upload a new deed photo.")
                             st.session_state.last_processed_submission_key = submission_key
                             st.session_state.submitted_upload_keys.add(submission_key)
                             st.markdown("</div>", unsafe_allow_html=True)
@@ -1346,109 +1208,51 @@ def dashboard_page(session: Session) -> None:
                             image_hash,
                         )
 
-                        eligibility = "Eligible for deed points âœ…" if verified else "Not eligible for deed points âŒ"
+                        eligibility = "Eligible for deed points ✅" if verified else "Not eligible for deed points ❌"
                         deed_size = (
-                            "Large deed impact ðŸŒ³" if verified and impact_magnitude == "large"
-                            else "Small deed impact ðŸŒ±" if verified
+                            "Large deed impact 🌳" if verified and impact_magnitude == "large"
+                            else "Small deed impact 🌱" if verified
                             else "No impact points awarded"
                         )
 
                         if verified:
-                            st.success(f"âœ… Deed verified and recorded. +{points} XP awarded.")
+                            st.success(f"✅ Deed verified and recorded. +{points} XP awarded.")
                             st.balloons()
                         else:
-                            st.warning("âš ï¸ Deed analyzed but not verified for points.")
+                            st.warning("⚠️ Deed analyzed but not verified for points.")
 
                         st.info(
-                            f"ðŸ¤– **AI Analysis:** {analysis}\n\n"
+                            f"🤖 **AI Analysis:** {analysis}\n\n"
                             f"**Impact category:** {deed_size}\n\n"
                             f"**Eligibility:** {eligibility}"
                         )
                     except Exception as e:
-                        st.error(f"âŒ Verification failed: {str(e)}")
+                        st.error(f"❌ Verification failed: {str(e)}")
 
         st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("---")
-    st.markdown("### ðŸŒ Global Impact Rankings")
+
+    st.markdown("### 🏆 Global Leaderboard")
     try:
         leaderboard_df = get_leaderboard_df(session).to_pandas()
 
         if not leaderboard_df.empty:
-            leaderboard_df.columns = [str(column).upper() for column in leaderboard_df.columns]
-            points_column = "POINTS" if "POINTS" in leaderboard_df.columns else None
-            if points_column is None:
-                st.warning("Leaderboard data is missing the POINTS column; showing 0 pts until synced.")
-                leaderboard_df["POINTS"] = 0
-            else:
-                leaderboard_df["POINTS"] = pd.to_numeric(
-                    leaderboard_df[points_column], errors="coerce"
-                ).fillna(0).astype(int)
             leaderboard_df["USERNAME"] = leaderboard_df["USERNAME"].astype(str).str.upper()
+            leaderboard_df["POINTS"] = pd.to_numeric(leaderboard_df["POINTS"], errors="coerce").fillna(0).astype(int)
             leaderboard_df = leaderboard_df.groupby("USERNAME", as_index=False)["POINTS"].sum()
             leaderboard_df = leaderboard_df.sort_values(by="POINTS", ascending=False, kind="stable").head(20).reset_index(drop=True)
             leaderboard_df.insert(0, "RANK", range(1, len(leaderboard_df) + 1))
             leaderboard_df.insert(1, "LEVEL", leaderboard_df["POINTS"].apply(get_guardian_title))
-            leaderboard_rows: list[str] = []
-            for row in leaderboard_df.itertuples(index=False):
-                rank = int(row.RANK)
-                rank_class = f"rank-{rank}" if rank <= 3 else "rank-default"
-                current_floor, next_rank_target = get_next_rank_target(int(row.POINTS))
-                if next_rank_target is None:
-                    progress_percent = 100
-                else:
-                    span = max(next_rank_target - current_floor, 1)
-                    progress_percent = int(
-                        ((int(row.POINTS) - current_floor) / span) * 100
-                    )
-                    progress_percent = max(0, min(progress_percent, 100))
-                badge = "ðŸ¥‡" if rank == 1 else "ðŸ¥ˆ" if rank == 2 else "ðŸ¥‰" if rank == 3 else "ðŸŒ¿"
-                leaderboard_rows.append(
-                    f"""
-                    <div class="leaderboard-row {rank_class}">
-                        <div class="leaderboard-rank">{badge} #{rank}</div>
-                        <div class="leaderboard-level">{html.escape(str(row.LEVEL))}</div>
-                        <div class="leaderboard-user">{html.escape(str(row.USERNAME))}</div>
-                        <div class="points-wrap">
-                            <div class="leaderboard-points">{int(row.POINTS):,} pts</div>
-                            <div class="mini-progress-track">
-                                <div class="mini-progress-fill" style="width: {progress_percent}%"></div>
-                            </div>
-                        </div>
-                    </div>
-                    """
-                )
-
-            leaderboard_html = f"""
-                <div class="leaderboard-shell">
-                    <div class="leaderboard-table">
-                        <div class="leaderboard-header">
-                            <div>Rank</div>
-                            <div>Level</div>
-                            <div>Guardian</div>
-                            <div>Points</div>
-                        </div>
-                        {''.join(leaderboard_rows)}
-                    </div>
-                </div>
-                """
-            st.components.v1.html(
-                f"""
-                <style>
-                    body {{
-                        margin: 0;
-                        background: transparent;
-                    }}
-                </style>
-                {leaderboard_html}
-                """,
-                height=max(220, 78 + (len(leaderboard_rows) * 92)),
-                scrolling=False,
+            st.dataframe(
+                leaderboard_df[["RANK", "LEVEL", "USERNAME", "POINTS"]],
+                use_container_width=True,
+                hide_index=True,
             )
         else:
-            st.info("ðŸŒ± Be the first to verify a deed and top the leaderboard!")
+            st.info("🌱 Be the first to verify a deed and top the leaderboard!")
     except Exception:
-        st.info("ðŸ“Š Leaderboard is being initialized. Check back soon!")
+        st.info("📊 Leaderboard is being initialized. Check back soon!")
 
 
 # ============================================================================
