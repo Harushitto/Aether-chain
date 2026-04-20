@@ -1210,10 +1210,10 @@ if "submitted_upload_keys" not in st.session_state:
     st.session_state.submitted_upload_keys = set()
 if "user_xp" not in st.session_state:
     st.session_state.user_xp = 0
-if "show_guardian_signup" not in st.session_state:
-    st.session_state.show_guardian_signup = False
-if "pending_wallet_address" not in st.session_state:
-    st.session_state.pending_wallet_address = None
+if "needs_username_registration" not in st.session_state:
+    st.session_state.needs_username_registration = False
+if "wallet_lookup_complete" not in st.session_state:
+    st.session_state.wallet_lookup_complete = False
 if "profile_edit_mode" not in st.session_state:
     st.session_state.profile_edit_mode = False
 if "profile_image_ref" not in st.session_state:
@@ -1227,123 +1227,174 @@ if "last_wallet_lookup" not in st.session_state:
 # ============================================================================
 # 7. LOGIN PAGE
 # ============================================================================
+def complete_manual_login(wallet_address: str, username: str) -> None:
+    """Complete login/registration flow after wallet + username validation."""
+    wallet_address = wallet_address.strip()
+    username = username.strip()
+
+    if not SOLANA_WALLET_PATTERN.fullmatch(wallet_address):
+        st.error("Invalid Solana wallet address. Please verify and try again.")
+        return
+
+    try:
+        session = create_snowflake_session()
+        existing_usernames = get_existing_usernames(session)
+        normalized_username = username.upper()
+        if normalized_username in existing_usernames:
+            st.warning("Username already taken.")
+            suggestions = generate_username_suggestions(username, wallet_address, existing_usernames)
+            if suggestions:
+                st.info("Try one of these available usernames: " + ", ".join(suggestions))
+            return
+
+        create_user_entry(session, username, wallet_address)
+        st.session_state.wallet_address = wallet_address
+        st.session_state.username = username
+        st.session_state.profile_image_ref = get_wallet_profile_image_hash(session, wallet_address)
+        st.session_state.profile_image_preview = None
+        st.session_state.user_xp = get_user_total_points(session, username)
+        st.session_state.logged_in = True
+        st.session_state.authenticated = True
+        st.session_state.needs_username_registration = False
+        st.session_state.wallet_lookup_complete = False
+        st.session_state.daily_wisdom = generate_daily_wisdom()
+        st.rerun()
+    except Exception:
+        st.error(
+            "We couldn't sync your wallet with Snowflake right now. "
+            "Please try again in a moment."
+        )
+
+
 def login_page() -> None:
-    """Render the smart login card and Guardian onboarding flow."""
+    """Render smart check-in authentication page."""
     col1, col2, col3 = st.columns([1, 2, 1])
 
     with col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
         st.markdown(
             """
-            <div class="nature-panel">
-                <div class="card-container step-card botanical-step login-header-card wallet-card">
-                    <h2 style="margin-top: 0;">🌱 Nature Panel</h2>
-                    <p>Use your Solana Wallet ID to enter the forest network.</p>
-                </div>
+        <h1 style="text-align: center; font-size: 2.5rem;">
+            🌱 Aether-Chain
+        </h1>
+        <p style="text-align: center; color: #2db968; font-size: 1.2rem; margin-bottom: 2rem;">
+            Proof of Green • On-Chain Environmental Impact
+        </p>
+        """,
+            unsafe_allow_html=True,
+        )
+
+        st.markdown(
+            """
+            <div class="card-container step-card botanical-step login-header-card">
+                <h3>Welcome, Guardian!</h3>
+                <p>Enter your Wallet ID for smart check-in. Returning guardians skip registration.</p>
             </div>
             """,
             unsafe_allow_html=True,
         )
-        with st.container():
-            wallet_input = st.text_input(
-                "Solana Wallet ID",
-                key="manual_wallet_input",
-                placeholder="e.g. 9xQeWvG816bUx9EPfPy...",
-            )
-            enter_clicked = st.button(
-                "🌿 Enter the Aether",
-                type="primary",
-                use_container_width=True,
-            )
 
-            if enter_clicked:
-                submitted_wallet = wallet_input.strip()
-                if not submitted_wallet or not SOLANA_WALLET_PATTERN.fullmatch(submitted_wallet):
-                    st.error("Please enter a valid Solana Wallet ID.")
-                else:
-                    pool = get_snowflake_session_pool()
-                    session = None
-                    try:
-                        session = _validate_session_or_retry(pool, allow_retry=True)
-                        guardian_profile = get_guardian_profile_by_wallet(session, submitted_wallet)
-                        if guardian_profile and guardian_profile.get("username"):
-                            username = guardian_profile["username"] or "Guardian"
-                            st.session_state.authenticated = True
-                            st.session_state.logged_in = True
-                            st.session_state.wallet_address = submitted_wallet
-                            st.session_state.username = username
-                            st.session_state.profile_image_ref = guardian_profile.get("image_hash")
-                            st.session_state.profile_image_preview = None
-                            st.session_state.user_xp = get_user_total_points(session, username)
-                            st.session_state.show_guardian_signup = False
-                            st.session_state.pending_wallet_address = None
-                            st.success("Welcome back, Guardian.")
-                            st.rerun()
-                        else:
-                            st.session_state.pending_wallet_address = submitted_wallet
-                            st.session_state.show_guardian_signup = True
-                            st.info("New wallet detected. Choose your Guardian Name to continue.")
-                    except Exception:
-                        st.error("Snowflake login check failed. Please try again in a moment.")
-                    finally:
-                        if session is not None:
-                            pool.release(session)
+        st.markdown('<div class="card-container">', unsafe_allow_html=True)
+        st.markdown("#### 🔐 Smart Check-In")
 
-        if st.session_state.show_guardian_signup and st.session_state.pending_wallet_address:
-            with st.form("guardian_signup_form"):
-                guardian_name = st.text_input(
-                    "Guardian Name",
+        manual_wallet_input = st.text_input(
+            "Wallet ID",
+            key="manual_wallet_input",
+            placeholder="e.g. 9xQeWvG816bUx9EPfPy...",
+        )
+        submitted_wallet = manual_wallet_input.strip()
+        if submitted_wallet and submitted_wallet != st.session_state.last_wallet_lookup:
+            st.session_state.last_wallet_lookup = submitted_wallet
+            if not SOLANA_WALLET_PATTERN.fullmatch(submitted_wallet):
+                st.error("Invalid Solana Wallet ID format.")
+            else:
+                try:
+                    session = create_snowflake_session()
+                    guardian_profile = get_guardian_profile_by_wallet(session, submitted_wallet)
+                    if guardian_profile and guardian_profile.get("username"):
+                        existing_wallet_username = guardian_profile["username"] or "Guardian"
+                        st.session_state.wallet_address = submitted_wallet
+                        st.session_state.username = existing_wallet_username
+                        st.session_state.profile_image_ref = guardian_profile.get("image_hash")
+                        st.session_state.profile_image_preview = None
+                        st.session_state.user_xp = get_user_total_points(session, existing_wallet_username)
+                        st.session_state.logged_in = True
+                        st.session_state.authenticated = True
+                        st.session_state.needs_username_registration = False
+                        st.session_state.wallet_lookup_complete = False
+                        st.session_state.daily_wisdom = generate_daily_wisdom()
+                        st.success("Existing guardian found. Redirecting now...")
+                        st.rerun()
+                    else:
+                        st.session_state.wallet_address = submitted_wallet
+                        st.session_state.wallet_lookup_complete = True
+                        st.session_state.needs_username_registration = True
+                except Exception:
+                    pass
+
+        if st.session_state.wallet_lookup_complete and st.session_state.needs_username_registration:
+            st.info("🟢 Green Initiation: New wallet detected. Complete your guardian profile.")
+            with st.form("green_initiation_form"):
+                registration_username = st.text_input(
+                    "Choose Username",
                     key="register_guardian_name",
                     placeholder="Choose a unique guardian name",
                 )
-                signup_clicked = st.form_submit_button(
-                    "Complete Guardian Signup",
-                    type="secondary",
-                    use_container_width=True,
+                initiation_image = st.file_uploader(
+                    "Optional Profile Picture",
+                    type=["jpg", "jpeg", "png"],
+                    key="green_initiation_image",
                 )
+                register_submit = st.form_submit_button("Begin Journey", use_container_width=True)
 
-            if signup_clicked:
-                candidate_name = guardian_name.strip()
-                wallet_address = (st.session_state.pending_wallet_address or "").strip()
+            if register_submit:
+                candidate_name = registration_username.strip()
                 if not candidate_name:
-                    st.error("Please choose a Guardian Name.")
-                elif not re.fullmatch(r"^[A-Za-z0-9_]{3,32}$", candidate_name):
-                    st.error("Use 3-32 letters, numbers, or underscore for Guardian Name.")
-                elif not wallet_address:
-                    st.error("Wallet session expired. Enter your wallet again.")
+                    st.error("Please enter a Guardian Name before continuing.")
                 else:
-                    pool = get_snowflake_session_pool()
-                    session = None
                     try:
-                        session = _validate_session_or_retry(pool, allow_retry=True)
+                        session = create_snowflake_session()
                         existing_usernames = get_existing_usernames(session)
                         if candidate_name.upper() in existing_usernames:
-                            st.warning("Guardian Name already taken.")
+                            st.warning("Username already taken.")
                             suggestions = generate_username_suggestions(
                                 candidate_name,
-                                wallet_address,
+                                st.session_state.wallet_address or "",
                                 existing_usernames,
                             )
                             if suggestions:
-                                st.info("Try one of these names: " + ", ".join(suggestions))
+                                st.info("Try one of these available usernames: " + ", ".join(suggestions))
                         else:
-                            create_user_entry(session, candidate_name, wallet_address)
-                            st.session_state.authenticated = True
-                            st.session_state.logged_in = True
-                            st.session_state.wallet_address = wallet_address
+                            image_payload = uploaded_image_to_base64(initiation_image)
+                            create_user_entry(
+                                session,
+                                candidate_name,
+                                st.session_state.wallet_address or "",
+                                image_hash=image_payload,
+                            )
                             st.session_state.username = candidate_name
-                            st.session_state.profile_image_ref = get_wallet_profile_image_hash(session, wallet_address)
+                            st.session_state.profile_image_ref = image_payload
                             st.session_state.profile_image_preview = None
                             st.session_state.user_xp = get_user_total_points(session, candidate_name)
-                            st.session_state.show_guardian_signup = False
-                            st.session_state.pending_wallet_address = None
-                            st.success("Guardian profile created. Welcome to Aether-Chain.")
+                            st.session_state.logged_in = True
+                            st.session_state.authenticated = True
+                            st.session_state.needs_username_registration = False
+                            st.session_state.wallet_lookup_complete = False
+                            st.session_state.daily_wisdom = generate_daily_wisdom()
                             st.rerun()
                     except Exception:
-                        st.error("Could not create your Guardian profile right now.")
-                    finally:
-                        if session is not None:
-                            pool.release(session)
+                        st.error("Unable to complete Green Initiation right now.")
+
+        wallet_address = (st.session_state.wallet_address or "").strip()
+
+        if wallet_address:
+            st.success(f"Connected Wallet: {shorten_wallet_address(wallet_address)}")
+            st.caption(f"Username: {st.session_state.username}")
+            st.info("Finalizing login…")
+        else:
+            st.info("Enter your wallet ID to begin.")
+
+        st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ============================================================================
@@ -1458,8 +1509,6 @@ def render_profile_dashboard(session: Session) -> None:
             st.session_state.profile_image_ref = None
             st.session_state.profile_image_preview = None
             st.session_state.profile_edit_mode = False
-            st.session_state.show_guardian_signup = False
-            st.session_state.pending_wallet_address = None
             st.session_state.authenticated = False
             st.rerun()
 def dashboard_page(session: Session) -> None:
@@ -1483,11 +1532,8 @@ def dashboard_page(session: Session) -> None:
         unsafe_allow_html=True,
     )
     mission_text = "Mission: Reach Earth Legend status by verifying more deeds!"
-    current_xp = st.session_state.user_xp or 0
     try:
         preview_points = get_user_total_points(session, st.session_state.username)
-        current_xp = preview_points
-        st.session_state.user_xp = preview_points
         if get_guardian_title(preview_points) == "Earth Legend":
             mission_text = "Mission: Maintain Earth Legend status by mentoring and inspiring fellow Guardians!"
     except Exception:
@@ -1499,7 +1545,6 @@ def dashboard_page(session: Session) -> None:
             f"""
             <div class="card-container step-card botanical-step">
                 <h3>👋 Welcome, <strong>{html.escape(str(st.session_state.username))}</strong>!</h3>
-                <p><strong>Current XP:</strong> {int(current_xp)} points</p>
                 <p><strong>Current Mission:</strong> {mission_text}</p>
             </div>
             """,
