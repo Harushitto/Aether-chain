@@ -3,7 +3,6 @@ import hashlib
 import html
 import random
 import time
-import textwrap
 import base64
 from contextlib import contextmanager
 from queue import Empty, Queue
@@ -1311,8 +1310,6 @@ if "needs_username_registration" not in st.session_state:
     st.session_state.needs_username_registration = False
 if "wallet_lookup_complete" not in st.session_state:
     st.session_state.wallet_lookup_complete = False
-if "profile_edit_mode" not in st.session_state:
-    st.session_state.profile_edit_mode = False
 if "profile_image_ref" not in st.session_state:
     st.session_state.profile_image_ref = None
 if "profile_image_preview" not in st.session_state:
@@ -1327,8 +1324,6 @@ if "wallet_verified" not in st.session_state:
     st.session_state.wallet_verified = False
 if "verified_wallet_input" not in st.session_state:
     st.session_state.verified_wallet_input = ""
-if "nav_open" not in st.session_state:
-    st.session_state.nav_open = False
 if "last_award_deed" not in st.session_state:
     st.session_state.last_award_deed = ""
 if "share_message" not in st.session_state:
@@ -1449,27 +1444,7 @@ def login_page() -> None:
 # ============================================================================
 def _profile_avatar_data_uri() -> str:
     """Return data URI for circular icon/avatar image."""
-    if st.session_state.profile_image_preview:
-        return st.session_state.profile_image_preview
-    profile_ref = (st.session_state.profile_image_ref or "").strip()
-    if profile_ref.startswith("profile:sha256:"):
-        return DEFAULT_PROFILE_AVATAR
-    if profile_ref.startswith("data:image/"):
-        return profile_ref
-    if profile_ref:
-        return f"data:image/png;base64,{profile_ref}"
-    return profile_ref or DEFAULT_PROFILE_AVATAR
-
-
-def _center_crop_to_square(image: Image.Image, target_size: int = 512) -> Image.Image:
-    """Crop image to centered 1:1 square and resize for avatar use."""
-    rgb_image = image.convert("RGB")
-    width, height = rgb_image.size
-    crop_size = min(width, height)
-    left = (width - crop_size) // 2
-    top = (height - crop_size) // 2
-    cropped = rgb_image.crop((left, top, left + crop_size, top + crop_size))
-    return cropped.resize((target_size, target_size), Image.Resampling.LANCZOS)
+    return DEFAULT_PROFILE_AVATAR
 
 
 @st.dialog("🌿 Guardian Profile", width="large")
@@ -1489,43 +1464,12 @@ def _render_profile_overlay(session: Session) -> None:
         """,
         unsafe_allow_html=True,
     )
-    if st.button("🖼️ Update Avatar", key="profile_update_avatar_btn", use_container_width=True):
-        st.session_state.profile_edit_mode = not st.session_state.profile_edit_mode
-        st.rerun()
-
-    if st.session_state.profile_edit_mode:
-        uploaded_avatar = st.file_uploader(
-            "Upload a new profile image",
-            type=["jpg", "jpeg", "png"],
-            key="profile_avatar_uploader",
-        )
-        if uploaded_avatar is not None:
-            source_image = Image.open(uploaded_avatar)
-            cropped_avatar = _center_crop_to_square(source_image)
-            st.image(cropped_avatar, caption="1:1 avatar preview", width=160)
-            if st.button("✅ Save Avatar", key="save_avatar_button", use_container_width=True):
-                avatar_data_uri = image_to_data_uri(cropped_avatar, format="PNG")
-                st.session_state.profile_image_preview = avatar_data_uri
-                st.session_state.profile_image_ref = avatar_data_uri
-                st.session_state.profile_edit_mode = False
-                try:
-                    persist_profile_updates(
-                        session,
-                        st.session_state.username or "Guardian",
-                        wallet_value,
-                        avatar_data_uri,
-                    )
-                except RuntimeError as exc:
-                    st.warning(str(exc))
-                st.success("Profile avatar updated.")
-                st.rerun()
 
     st.markdown(f"**Username:** {st.session_state.username or 'Guardian'}")
     st.markdown(f"**Wallet Security Box:** `{wallet_value}`")
     st.markdown(f"**Nature Level:** {level} ({points} XP)")
 
     if st.button("Close", key="profile_modal_close", use_container_width=True):
-        st.session_state.profile_edit_mode = False
         st.rerun()
     if st.button("🚪 Logout", use_container_width=True, key="profile_logout"):
         st.session_state.logged_in = False
@@ -1533,7 +1477,6 @@ def _render_profile_overlay(session: Session) -> None:
         st.session_state.wallet_address = None
         st.session_state.profile_image_ref = None
         st.session_state.profile_image_preview = None
-        st.session_state.profile_edit_mode = False
         st.session_state.authenticated = False
         st.session_state.wallet_verified = False
         st.session_state.verified_wallet_input = ""
@@ -1555,6 +1498,36 @@ def _render_help_desk() -> None:
         st.rerun()
 
 
+@st.dialog("📊 Leaderboard & Stats", width="large")
+def _render_stats_overlay(session: Session) -> None:
+    """Leaderboard and personal XP stats modal."""
+    user_points = get_user_total_points(session, st.session_state.username)
+    title = get_guardian_title(user_points)
+    rank = get_user_rank(session, st.session_state.username or "")
+    st.markdown(f"**Guardian:** {st.session_state.username or 'Guardian'}")
+    st.markdown(f"**Total XP:** {user_points}")
+    st.markdown(f"**Nature Level:** {title}")
+    st.markdown(f"**Global Rank:** #{rank if rank else 'N/A'}")
+    st.markdown("---")
+    st.markdown("### 🏆 Leaderboard")
+    try:
+        leaderboard_df = get_leaderboard_df(session).to_pandas()
+        if not leaderboard_df.empty:
+            leaderboard_df["USERNAME"] = leaderboard_df["USERNAME"].astype(str).str.upper()
+            leaderboard_df["POINTS"] = pd.to_numeric(leaderboard_df["POINTS"], errors="coerce").fillna(0).astype(int)
+            leaderboard_df = leaderboard_df.groupby("USERNAME", as_index=False)["POINTS"].sum()
+            leaderboard_df = leaderboard_df.sort_values(by="POINTS", ascending=False, kind="stable").head(20).reset_index(drop=True)
+            leaderboard_df.insert(0, "RANK", range(1, len(leaderboard_df) + 1))
+            leaderboard_df.insert(1, "LEVEL", leaderboard_df["POINTS"].apply(get_guardian_title))
+            st.dataframe(leaderboard_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("🌱 Be the first to verify a deed and top the leaderboard!")
+    except Exception:
+        st.info("📊 Leaderboard is being initialized. Check back soon!")
+    if st.button("Close", key="stats_modal_close", use_container_width=True):
+        st.rerun()
+
+
 def get_user_rank(session: Session, username: str) -> Optional[int]:
     """Return 1-indexed rank based on total XP across guardians."""
     if not username:
@@ -1573,37 +1546,46 @@ def get_user_rank(session: Session, username: str) -> Optional[int]:
     return int(row.iloc[0]["RANK"])
 
 
-def render_sleek_navigation(session: Session) -> None:
-    """Top-left three-dot trigger and slide-out green navigation."""
-    st.markdown('<div class="menu-trigger">', unsafe_allow_html=True)
-    if st.button("⋮", key="menu_toggle"):
-        st.session_state.nav_open = not st.session_state.nav_open
-        st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
+def render_sidebar_menu(session: Session) -> None:
+    """Render the three-dot sidebar menu with all auxiliary navigation."""
+    with st.sidebar:
+        st.markdown("### ⋮ Menu")
+        if st.button("👤 Profile", key="sidebar_profile", use_container_width=True):
+            _render_profile_overlay(session)
+        if st.button("🆘 Help Desk", key="sidebar_help", use_container_width=True):
+            _render_help_desk()
+        if st.button("📊 Leaderboard / Stats", key="sidebar_stats", use_container_width=True):
+            _render_stats_overlay(session)
 
-    nav_class = "open" if st.session_state.nav_open else "closed"
-    st.markdown(f'<div class="slide-nav {nav_class}">', unsafe_allow_html=True)
-    st.markdown("### 🌿 Navigation")
-    open_profile = st.button("Profile", key="nav_profile", use_container_width=True)
-    if open_profile:
-        st.session_state.nav_open = False
-    open_help = st.button("Help Desk", key="nav_help", use_container_width=True)
-    if open_help:
-        st.session_state.nav_open = False
-    if st.button("Close Menu", key="nav_close", use_container_width=True):
-        st.session_state.nav_open = False
-        st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
 
-    if open_help:
-        _render_help_desk()
-    elif open_profile:
-        _render_profile_overlay(session)
+def render_deed_ticker(session: Session) -> None:
+    """Render global deed ticker on the main dashboard."""
+    feed_items = []
+    try:
+        feed_items = get_recent_deed_feed(session, limit=10)
+    except Exception:
+        feed_items = []
+
+    if st.session_state.deed_alert_text:
+        ticker_text = st.session_state.deed_alert_text
+        ticker_class = "deed-ticker deed-alert"
+    else:
+        ticker_text = " 🌿 ".join(feed_items) if feed_items else "Guardians are greening the planet in real time. 🌱"
+        ticker_class = "deed-ticker"
+
+    st.markdown(
+        f"""
+        <div class="{ticker_class}">
+            <div class="deed-ticker-track">{html.escape(ticker_text)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def dashboard_page(session: Session) -> None:
     """Render the main dashboard after login."""
-    render_sleek_navigation(session)
+    render_sidebar_menu(session)
     now_ts = time.time()
     if (
         st.session_state.deed_alert_text
@@ -1621,6 +1603,7 @@ def dashboard_page(session: Session) -> None:
     """,
         unsafe_allow_html=True,
     )
+    render_deed_ticker(session)
     st.markdown("### 🌍 Deed Submission")
     col1, col2 = st.columns(2)
 
@@ -1764,152 +1747,6 @@ def dashboard_page(session: Session) -> None:
 
         st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("---")
-
-    try:
-        user_points = get_user_total_points(session, st.session_state.username)
-        title = get_guardian_title(user_points)
-        floor, next_target = get_next_rank_target(user_points)
-        if next_target is None:
-            progress_pct = 100.0
-            progress_caption = "Max rank achieved"
-        else:
-            span = max(1, next_target - floor)
-            progress_pct = max(0.0, min(100.0, ((user_points - floor) / span) * 100))
-            progress_caption = f"{max(next_target - user_points, 0)} XP to {get_guardian_title(next_target)}"
-
-        show_float = (
-            st.session_state.last_awarded_points > 0
-            and (time.time() - st.session_state.last_award_time) < 2.5
-        )
-
-        col1, col3 = st.columns(2)
-        with col1:
-            st.markdown(
-                f"""
-            <div class="card-container" style="text-align: center; position: relative;">
-                <h3 style="color: #2db968; margin: 0;">Your XP</h3>
-                <p class="xp-value {'bump' if show_float else ''}" style="font-size: 2.5rem; color: #2db968; font-weight: bold; margin: 10px 0;">
-                    {user_points}
-                </p>
-                {f'<div class="xp-float">+{st.session_state.last_awarded_points} XP</div>' if show_float else ''}
-            </div>
-            """,
-                unsafe_allow_html=True,
-            )
-            show_share_cta = (
-                st.session_state.last_awarded_points > 0
-                and bool(st.session_state.last_award_deed)
-                and (time.time() - st.session_state.last_award_time) <= 5
-            )
-            share_slot = st.empty()
-            if show_share_cta:
-                rank = get_user_rank(session, st.session_state.username or "") or "?"
-                share_post = (
-                    f"🛡️ Guardian {st.session_state.username} just ascended!\n"
-                    f"🌿 Deed: {st.session_state.last_award_deed}\n"
-                    f"✨ Gained: +{st.session_state.last_awarded_points} XP | Total: {user_points} XP | Rank: #{rank}\n"
-                    "Join the Aether-Chain and prove your green impact! 🌱"
-                )
-                if share_slot.button(
-                    "🌿 Share your impact",
-                    key=f"share_impact_{int(st.session_state.last_award_time)}",
-                    use_container_width=True,
-                ):
-                    st.session_state.share_message = share_post
-                if st.session_state.share_message:
-                    st.markdown(
-                        f"""
-                        <div class="card-container">
-                            <h4 style="margin: 0 0 8px;">✨ Ready-to-share post</h4>
-                            <p style="white-space: pre-wrap; margin-bottom: 0;">{html.escape(st.session_state.share_message)}</p>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                time.sleep(5)
-                share_slot.empty()
-
-        with col3:
-            status_class = "title-pill legendary" if title == "Earth Legend" else "title-pill"
-            st.markdown(
-                f"""
-            <div class="status-card">
-                <h3 style="color: #8ff7b9; margin: 0;">Status</h3>
-                <div class="{status_class}">{title}</div>
-                <div style="font-size: 0.84rem; color: #b5ffcb;">Progress to next rank</div>
-                <div class="progress-wrap"><div class="progress-bar" style="width: {progress_pct:.1f}%;"></div></div>
-                <div style="font-size: 0.82rem; color: #9de7b8;">{progress_caption}</div>
-            </div>
-            """,
-                unsafe_allow_html=True,
-            )
-    except Exception:
-        st.warning("Could not load user stats.")
-
-    st.markdown("---")
-
-    st.markdown("### 🏆 Leaderboard")
-    try:
-        leaderboard_df = get_leaderboard_df(session).to_pandas()
-
-        if not leaderboard_df.empty:
-            leaderboard_df["USERNAME"] = leaderboard_df["USERNAME"].astype(str).str.upper()
-            leaderboard_df["POINTS"] = pd.to_numeric(leaderboard_df["POINTS"], errors="coerce").fillna(0).astype(int)
-            leaderboard_df = leaderboard_df.groupby("USERNAME", as_index=False)["POINTS"].sum()
-            leaderboard_df = leaderboard_df.sort_values(by="POINTS", ascending=False, kind="stable").head(20).reset_index(drop=True)
-            leaderboard_df.insert(0, "RANK", range(1, len(leaderboard_df) + 1))
-            leaderboard_df.insert(1, "LEVEL", leaderboard_df["POINTS"].apply(get_guardian_title))
-
-            table_html = "<table class='leaderboard-table'><thead><tr><th>Rank</th><th>Level</th><th>Guardian</th><th>Total XP</th></tr></thead><tbody>"
-            for _, row in leaderboard_df.iterrows():
-                rank = int(row["RANK"])
-                row_class = f"rank-{rank}" if rank <= 3 else ""
-                guardian = html.escape(str(row["USERNAME"]))
-                level = html.escape(str(row["LEVEL"]))
-                xp = html.escape(str(int(row["POINTS"])))
-                table_html += (
-                    f"<tr class='{row_class}'>"
-                    f"<td>{rank}</td>"
-                    f"<td>{level}</td>"
-                    f"<td>{guardian}</td>"
-                    f"<td>{xp} XP</td>"
-                    f"</tr>"
-                )
-            table_html += "</tbody></table>"
-
-            leaderboard_html = textwrap.dedent(
-                f"""
-                <div class="nature-panel">
-                    <div class="leaderboard-shell">
-                        {table_html}
-                    </div>
-                </div>
-                """
-            ).strip()
-            st.markdown(leaderboard_html, unsafe_allow_html=True)
-        else:
-            st.markdown(
-                """
-                <div class="nature-panel">
-                    <div class="card-container" style="margin: 0;">
-                        🌱 Be the first to verify a deed and top the leaderboard!
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-    except Exception:
-        st.markdown(
-            """
-            <div class="nature-panel">
-                <div class="card-container" style="margin: 0;">
-                    📊 Leaderboard is being initialized. Check back soon!
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
 
 
 # ============================================================================
