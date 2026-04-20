@@ -1,9 +1,7 @@
 import re
 import hashlib
 import html
-import random
 import time
-import textwrap
 import base64
 from contextlib import contextmanager
 from queue import Empty, Queue
@@ -72,25 +70,29 @@ st.markdown(
         font-weight: 700;
     }
 
-    .stButton > button {
+    .stButton > button,
+    .stFormSubmitButton > button {
         background: linear-gradient(135deg, #2db968 0%, #1a8f4f 100%);
         color: #ffffff;
-        border: none;
+        border: 1px solid rgba(151, 255, 196, 0.45);
         border-radius: 12px;
         padding: 12px 24px;
-        font-weight: 600;
+        font-weight: 700;
         font-size: 1rem;
+        letter-spacing: 0.2px;
         transition: all 0.3s ease;
         box-shadow: 0 4px 15px rgba(45, 185, 104, 0.3);
     }
 
-    .stButton > button:hover {
+    .stButton > button:hover,
+    .stFormSubmitButton > button:hover {
         background: linear-gradient(135deg, #1a8f4f 0%, #0d5c2c 100%);
         box-shadow: 0 6px 20px rgba(45, 185, 104, 0.5);
         transform: translateY(-2px);
     }
 
-    .stButton > button[kind="primary"]:hover {
+    .stButton > button[kind="primary"]:hover,
+    .stFormSubmitButton > button[kind="primary"]:hover {
         box-shadow: 0 0 18px rgba(45, 185, 104, 0.95), 0 0 32px rgba(26, 143, 79, 0.7);
         filter: brightness(1.08);
     }
@@ -121,7 +123,7 @@ st.markdown(
     .card-container {
         background-color: #0f3018;
         border: 2px solid #1a8f4f;
-        border-radius: 12px;
+        border-radius: 15px;
         padding: 20px;
         margin: 15px 0;
         box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
@@ -228,6 +230,17 @@ st.markdown(
         margin-bottom: 12px;
     }
 
+    .login-shell {
+        background: linear-gradient(145deg, rgba(10, 33, 19, 0.86), rgba(23, 77, 42, 0.45));
+        border: 1px solid rgba(126, 240, 172, 0.38);
+        border-radius: 15px;
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(45, 185, 104, 0.15);
+        max-width: 720px;
+        margin: 0 auto;
+    }
+
     .quote-banner {
         margin: 10px 0 20px;
         padding: 12px 16px;
@@ -254,6 +267,118 @@ st.markdown(
         border: 1px solid rgba(115, 255, 170, 0.4);
         padding: 22px;
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    }
+
+    .leaderboard-shell {
+        width: 100%;
+        background: linear-gradient(150deg, rgba(12, 42, 23, 0.88), rgba(17, 63, 34, 0.68));
+        border: 1px solid rgba(126, 240, 172, 0.35);
+        border-radius: 15px;
+        padding: 18px;
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.26);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+    }
+
+    .leaderboard-table {
+        width: 100%;
+        border-radius: 15px;
+        overflow: hidden;
+        border: 1px solid rgba(115, 255, 170, 0.22);
+    }
+
+    .leaderboard-header,
+    .leaderboard-row {
+        display: grid;
+        grid-template-columns: 0.9fr 1.8fr 2.8fr 2.5fr;
+        gap: 12px;
+        align-items: center;
+    }
+
+    .leaderboard-header {
+        background: linear-gradient(90deg, #2db968, #1a8f4f);
+        color: #f4fff8;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-size: 0.86rem;
+        padding: 12px 14px;
+    }
+
+    .leaderboard-row {
+        margin-top: 8px;
+        padding: 12px 14px;
+        background: rgba(8, 27, 14, 0.74);
+        border: 1px solid rgba(115, 255, 170, 0.15);
+        border-radius: 12px;
+        transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+    }
+
+    .leaderboard-row:hover {
+        transform: scale(1.02);
+        border-color: rgba(115, 255, 170, 0.5);
+        box-shadow: 0 10px 20px rgba(45, 185, 104, 0.2);
+    }
+
+    .leaderboard-row.rank-1 {
+        border-color: rgba(245, 214, 119, 0.95);
+        box-shadow: 0 0 16px rgba(245, 214, 119, 0.45);
+    }
+
+    .leaderboard-row.rank-2 {
+        border-color: rgba(209, 224, 237, 0.92);
+        box-shadow: 0 0 14px rgba(209, 224, 237, 0.35);
+    }
+
+    .leaderboard-row.rank-3 {
+        border-color: rgba(204, 143, 91, 0.95);
+        box-shadow: 0 0 14px rgba(204, 143, 91, 0.35);
+    }
+
+    .leaderboard-rank {
+        font-weight: 800;
+        font-size: 1rem;
+    }
+
+    .leaderboard-level {
+        color: #c7ffdd;
+        font-weight: 600;
+    }
+
+    .leaderboard-user {
+        font-family: 'Inter', 'Segoe UI', sans-serif;
+        font-weight: 800;
+        letter-spacing: 0.35px;
+    }
+
+    .points-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .leaderboard-points {
+        font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+        font-weight: 700;
+        color: #eafff2;
+    }
+
+    .mini-progress-track {
+        width: 100%;
+        height: 7px;
+        border-radius: 999px;
+        background: rgba(126, 240, 172, 0.2);
+        overflow: hidden;
+    }
+
+    .mini-progress-fill {
+        height: 100%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #56df92 0%, #2db968 100%);
+    }
+
+    .verify-button {
+        animation: pulse-glow 2s ease-in-out infinite;
     }
 
     .title-pill {
@@ -336,125 +461,6 @@ st.markdown(
         background-size: contain;
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 280 160'%3E%3Cpath fill='%2376f1a6' d='M21 142c51-5 79-37 95-74 6-16 16-37 34-45-7 17-7 38-2 55 6 24 24 45 47 55-23 11-52 7-74-6-20-11-32-32-46-49-15 38-31 55-54 64z'/%3E%3Cpath fill='%234ee08a' d='M160 121c24-18 41-44 48-73 15 19 24 43 23 68-1 10-2 20-6 29-7-12-19-21-32-24-11-3-23-2-33 0z'/%3E%3C/svg%3E");
         pointer-events: none;
-    }
-
-    .verify-button button {
-        animation: pulse-glow 1.9s ease-in-out infinite;
-    }
-
-    .nature-panel {
-        position: relative;
-        overflow: hidden;
-        border: 1px solid rgba(45, 185, 104, 0.45);
-        border-radius: 14px;
-        padding: 20px;
-        margin-top: 18px;
-        background:
-            linear-gradient(135deg, rgba(9, 27, 16, 0.85), rgba(16, 62, 32, 0.7)),
-            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220' viewBox='0 0 220 220'%3E%3Cg fill='none' stroke='%233ecf78' stroke-opacity='0.2' stroke-width='1.2'%3E%3Cpath d='M30 192c38-42 68-100 72-164'/%3E%3Cpath d='M108 174c20-24 40-58 46-102'/%3E%3Cpath d='M24 138c16-8 28-22 38-38'/%3E%3Cpath d='M130 126c16-12 22-26 28-46'/%3E%3C/g%3E%3C/svg%3E");
-        background-size: cover, 220px 220px;
-        backdrop-filter: blur(3px);
-    }
-
-    .leaderboard-shell {
-        border-radius: 16px;
-        padding: 10px;
-        background: rgba(14, 44, 24, 0.4);
-        border: 1px solid rgba(115, 255, 170, 0.25);
-        box-shadow: inset 0 0 0 1px rgba(16, 82, 40, 0.5), 0 8px 28px rgba(0, 0, 0, 0.25);
-        backdrop-filter: blur(10px);
-    }
-
-    .leaderboard-table {
-        width: 100%;
-        border-collapse: separate;
-        border-spacing: 0 10px;
-    }
-
-    .leaderboard-table thead th {
-        color: #7ef0ac;
-        text-align: left;
-        font-size: 0.9rem;
-        padding: 6px 12px 10px;
-    }
-
-    .leaderboard-table tbody tr {
-        background: rgba(7, 26, 14, 0.65);
-        border-radius: 12px;
-        overflow: hidden;
-    }
-
-    .leaderboard-table tbody td {
-        padding: 12px;
-        border-top: 1px solid rgba(80, 209, 130, 0.2);
-        border-bottom: 1px solid rgba(80, 209, 130, 0.2);
-    }
-
-    .leaderboard-table tbody td:first-child {
-        border-left: 4px solid rgba(80, 209, 130, 0.35);
-        border-top-left-radius: 12px;
-        border-bottom-left-radius: 12px;
-        width: 70px;
-        font-weight: 700;
-    }
-
-    .leaderboard-table tbody td:last-child {
-        border-right: 1px solid rgba(80, 209, 130, 0.2);
-        border-top-right-radius: 12px;
-        border-bottom-right-radius: 12px;
-        color: #46ff99;
-        font-weight: 800;
-        text-shadow: 0 0 8px rgba(45, 185, 104, 0.45);
-    }
-
-    .leaderboard-table tbody tr.rank-1 td:first-child { border-left-color: #d4af37; }
-    .leaderboard-table tbody tr.rank-2 td:first-child { border-left-color: #c0c0c0; }
-    .leaderboard-table tbody tr.rank-3 td:first-child { border-left-color: #cd7f32; }
-
-    .profile-icon-wrap {
-        position: fixed;
-        top: 20px;
-        right: 22px;
-        z-index: 999;
-    }
-
-    .profile-icon-wrap button {
-        width: 62px !important;
-        height: 62px !important;
-        border-radius: 50% !important;
-        border: 2px solid var(--accent-green) !important;
-        box-shadow: 0 0 10px var(--accent-green) !important;
-        padding: 0 !important;
-        overflow: hidden !important;
-        background: var(--card-bg) !important;
-    }
-
-    .profile-dashboard-shell {
-        background: var(--card-bg);
-        border: 1px solid var(--accent-green);
-        border-radius: 16px;
-        padding: 16px;
-        box-shadow: 0 0 16px rgba(45, 185, 104, 0.45);
-        margin-bottom: 16px;
-    }
-
-    .dashboard-avatar {
-        width: 120px;
-        height: 120px;
-        border-radius: 50%;
-        border: 2px solid var(--accent-green);
-        box-shadow: 0 0 10px var(--accent-green);
-        object-fit: cover;
-    }
-
-    .profile-corner-avatar {
-        width: 62px;
-        height: 62px;
-        border-radius: 50%;
-        border: 2px solid var(--accent-green);
-        box-shadow: 0 0 10px var(--accent-green);
-        object-fit: cover;
-        background: var(--card-bg);
     }
 
     .success-modal {
@@ -546,7 +552,6 @@ LEADERBOARD_INSERT_SCHEMA = [
     "ACTION_CONTEXT",
     "IMAGE_HASH",
 ]
-DEFAULT_PROFILE_AVATAR = "https://api.dicebear.com/9.x/bottts-neutral/svg?seed=NatureGuardian"
 COMMON_DEED_TYPO_CORRECTIONS = {
     "panted": "planted",
     "planed": "planted",
@@ -573,6 +578,13 @@ def shorten_wallet_address(wallet_address: str) -> str:
     if len(cleaned) <= 10:
         return cleaned
     return f"{cleaned[:4]}...{cleaned[-3:]}"
+
+
+def verify_wallet(wallet_input: str) -> tuple[bool, str]:
+    """Validate and normalize a Solana wallet address from text input."""
+    normalized_wallet = (wallet_input or "").strip()
+    is_verified = bool(SOLANA_WALLET_PATTERN.fullmatch(normalized_wallet))
+    return is_verified, normalized_wallet
 
 
 def normalize_action_context(action_context: str) -> str:
@@ -663,4 +675,10 @@ class SnowflakeSessionPool:
                 break
             try:
                 session.close()
-            e
+            except Exception:
+                pass
+
+
+@st.cache_resource(show_spinner=False)
+def get_snowflake_session_pool() -> SnowflakeSessionPool:
+    """
