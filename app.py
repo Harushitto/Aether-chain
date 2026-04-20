@@ -11,6 +11,7 @@ import google.generativeai as genai
 import pandas as pd
 import streamlit as st
 from PIL import Image
+import snowflake.snowpark.exceptions as snowpark_exceptions
 from snowflake.snowpark import Session
 from snowflake.snowpark import functions as F
 
@@ -583,12 +584,52 @@ def normalize_action_context(action_context: str) -> str:
 # ============================================================================
 # 4. DATABASE UTILITIES
 # ============================================================================
-@st.cache_resource
-def create_snowflake_session() -> Session:
-    """Create and cache a Snowflake session for the active Streamlit worker."""
+SNOWPARK_RETRYABLE_EXCEPTIONS = tuple(
+    exc
+    for exc in (
+        getattr(snowpark_exceptions, "SnowparkClientException", None),
+        getattr(snowpark_exceptions, "SnowparkSessionException", None),
+        getattr(snowpark_exceptions, "SnowparkServerException", None),
+        getattr(snowpark_exceptions, "SnowparkSQLException", None),
+    )
+    if exc is not None
+)
+
+
+def _is_session_valid(session: Session) -> bool:
+    """Return True when the existing Snowflake session still accepts queries."""
     try:
-        return Session.builder.configs(st.secrets["snowflake"]).create()
-    except Exception as e:
+        session.sql("SELECT 1").collect()
+        return True
+    except SNOWPARK_RETRYABLE_EXCEPTIONS:
+        return False
+
+
+def reset_snowflake_session() -> None:
+    """Close and remove any cached Snowflake session from Streamlit state."""
+    existing_session = st.session_state.get("snowflake_session")
+    if existing_session is not None:
+        try:
+            existing_session.close()
+        except Exception:
+            pass
+    st.session_state.pop("snowflake_session", None)
+
+
+def create_snowflake_session() -> Session:
+    """Create/reuse a Snowflake session and auto-reconnect after timeout."""
+    existing_session = st.session_state.get("snowflake_session")
+    if existing_session is not None and _is_session_valid(existing_session):
+        return existing_session
+
+    if existing_session is not None:
+        reset_snowflake_session()
+
+    try:
+        session = Session.builder.configs(st.secrets["snowflake"]).create()
+        st.session_state.snowflake_session = session
+        return session
+    except SNOWPARK_RETRYABLE_EXCEPTIONS as e:
         raise RuntimeError(
             "Failed to create Snowflake session. Verify Streamlit secrets for "
             "account, user, password/authenticator, role, warehouse, database, and schema."
@@ -1307,9 +1348,8 @@ def render_profile_dashboard(session: Session) -> None:
             st.session_state.profile_image_preview = None
             st.session_state.profile_edit_mode = False
             st.rerun()
-def dashboard_page() -> None:
+def dashboard_page(session: Session) -> None:
     """Render the main dashboard after login."""
-    session = create_snowflake_session()
     render_profile_dashboard(session)
     now_ts = time.time()
     if (
@@ -1678,11 +1718,25 @@ def dashboard_page() -> None:
 # ============================================================================
 def main() -> None:
     configure_gemini()
+    try:
+        session = create_snowflake_session()
+    except SNOWPARK_RETRYABLE_EXCEPTIONS:
+        st.error("Snowflake connection timed out before the app finished loading.")
+        if st.button("Reconnect", key="snowflake_reconnect_button"):
+            reset_snowflake_session()
+            st.rerun()
+        return
+    except RuntimeError:
+        st.error("Snowflake connection failed. Please verify credentials and reconnect.")
+        if st.button("Reconnect", key="snowflake_reconnect_runtime_button"):
+            reset_snowflake_session()
+            st.rerun()
+        return
 
     if not st.session_state.logged_in:
         login_page()
     else:
-        dashboard_page()
+        dashboard_page(session)
 
 
 if __name__ == "__main__":
