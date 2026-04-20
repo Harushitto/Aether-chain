@@ -123,7 +123,7 @@ st.markdown(
     .card-container {
         background-color: #0f3018;
         border: 2px solid #1a8f4f;
-        border-radius: 12px;
+        border-radius: 15px;
         padding: 20px;
         margin: 15px 0;
         box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
@@ -230,6 +230,17 @@ st.markdown(
         margin-bottom: 12px;
     }
 
+    .login-shell {
+        background: linear-gradient(145deg, rgba(10, 33, 19, 0.86), rgba(23, 77, 42, 0.45));
+        border: 1px solid rgba(126, 240, 172, 0.38);
+        border-radius: 15px;
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(45, 185, 104, 0.15);
+        max-width: 720px;
+        margin: 0 auto;
+    }
+
     .quote-banner {
         margin: 10px 0 20px;
         padding: 12px 16px;
@@ -256,6 +267,114 @@ st.markdown(
         border: 1px solid rgba(115, 255, 170, 0.4);
         padding: 22px;
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    }
+
+    .leaderboard-shell {
+        width: 100%;
+        background: linear-gradient(150deg, rgba(12, 42, 23, 0.88), rgba(17, 63, 34, 0.68));
+        border: 1px solid rgba(126, 240, 172, 0.35);
+        border-radius: 15px;
+        padding: 18px;
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.26);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+    }
+
+    .leaderboard-table {
+        width: 100%;
+        border-radius: 15px;
+        overflow: hidden;
+        border: 1px solid rgba(115, 255, 170, 0.22);
+    }
+
+    .leaderboard-header,
+    .leaderboard-row {
+        display: grid;
+        grid-template-columns: 0.9fr 1.8fr 2.8fr 2.5fr;
+        gap: 12px;
+        align-items: center;
+    }
+
+    .leaderboard-header {
+        background: linear-gradient(90deg, #2db968, #1a8f4f);
+        color: #f4fff8;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-size: 0.86rem;
+        padding: 12px 14px;
+    }
+
+    .leaderboard-row {
+        margin-top: 8px;
+        padding: 12px 14px;
+        background: rgba(8, 27, 14, 0.74);
+        border: 1px solid rgba(115, 255, 170, 0.15);
+        border-radius: 12px;
+        transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+    }
+
+    .leaderboard-row:hover {
+        transform: scale(1.02);
+        border-color: rgba(115, 255, 170, 0.5);
+        box-shadow: 0 10px 20px rgba(45, 185, 104, 0.2);
+    }
+
+    .leaderboard-row.rank-1 {
+        border-color: rgba(245, 214, 119, 0.95);
+        box-shadow: 0 0 16px rgba(245, 214, 119, 0.45);
+    }
+
+    .leaderboard-row.rank-2 {
+        border-color: rgba(209, 224, 237, 0.92);
+        box-shadow: 0 0 14px rgba(209, 224, 237, 0.35);
+    }
+
+    .leaderboard-row.rank-3 {
+        border-color: rgba(204, 143, 91, 0.95);
+        box-shadow: 0 0 14px rgba(204, 143, 91, 0.35);
+    }
+
+    .leaderboard-rank {
+        font-weight: 800;
+        font-size: 1rem;
+    }
+
+    .leaderboard-level {
+        color: #c7ffdd;
+        font-weight: 600;
+    }
+
+    .leaderboard-user {
+        font-family: 'Inter', 'Segoe UI', sans-serif;
+        font-weight: 800;
+        letter-spacing: 0.35px;
+    }
+
+    .points-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .leaderboard-points {
+        font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+        font-weight: 700;
+        color: #eafff2;
+    }
+
+    .mini-progress-track {
+        width: 100%;
+        height: 7px;
+        border-radius: 999px;
+        background: rgba(126, 240, 172, 0.2);
+        overflow: hidden;
+    }
+
+    .mini-progress-fill {
+        height: 100%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #56df92 0%, #2db968 100%);
     }
 
     .title-pill {
@@ -1046,7 +1165,7 @@ def login_page() -> None:
 
         st.markdown(
             """
-            <div class="card-container step-card botanical-step login-header-card">
+            <div class="card-container step-card botanical-step login-header-card login-shell">
                 <h3>Welcome, Guardian!</h3>
                 <p>Create your manual session with a unique Username and your Solana Wallet ID.</p>
             </div>
@@ -1054,8 +1173,8 @@ def login_page() -> None:
             unsafe_allow_html=True,
         )
 
-        st.markdown('<div class="card-container">', unsafe_allow_html=True)
-        st.markdown("#### 🔐 Manual Login")
+        st.markdown('<div class="card-container login-shell">', unsafe_allow_html=True)
+        st.markdown("#### 🔐 Login")
 
         with st.form("manual_login_form"):
             manual_username_input = st.text_input(
@@ -1232,8 +1351,7 @@ def dashboard_page(session: Session) -> None:
         st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("---")
-
-    st.markdown("### 🏆 Global Leaderboard")
+    st.markdown("### 🌍 Global Impact Rankings")
     try:
         leaderboard_df = get_leaderboard_df(session).to_pandas()
 
@@ -1244,10 +1362,44 @@ def dashboard_page(session: Session) -> None:
             leaderboard_df = leaderboard_df.sort_values(by="POINTS", ascending=False, kind="stable").head(20).reset_index(drop=True)
             leaderboard_df.insert(0, "RANK", range(1, len(leaderboard_df) + 1))
             leaderboard_df.insert(1, "LEVEL", leaderboard_df["POINTS"].apply(get_guardian_title))
-            st.dataframe(
-                leaderboard_df[["RANK", "LEVEL", "USERNAME", "POINTS"]],
-                use_container_width=True,
-                hide_index=True,
+            max_points = max(int(leaderboard_df["POINTS"].max()), 1)
+            leaderboard_rows: list[str] = []
+            for row in leaderboard_df.itertuples(index=False):
+                rank = int(row.RANK)
+                rank_class = f"rank-{rank}" if rank <= 3 else "rank-default"
+                progress_percent = int((int(row.POINTS) / max_points) * 100)
+                badge = "🥇" if rank == 1 else "🥈" if rank == 2 else "🥉" if rank == 3 else "🌿"
+                leaderboard_rows.append(
+                    f"""
+                    <div class="leaderboard-row {rank_class}">
+                        <div class="leaderboard-rank">{badge} #{rank}</div>
+                        <div class="leaderboard-level">{html.escape(str(row.LEVEL))}</div>
+                        <div class="leaderboard-user">{html.escape(str(row.USERNAME))}</div>
+                        <div class="points-wrap">
+                            <div class="leaderboard-points">{int(row.POINTS):,} pts</div>
+                            <div class="mini-progress-track">
+                                <div class="mini-progress-fill" style="width: {progress_percent}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    """
+                )
+
+            st.markdown(
+                f"""
+                <div class="leaderboard-shell">
+                    <div class="leaderboard-table">
+                        <div class="leaderboard-header">
+                            <div>Rank</div>
+                            <div>Level</div>
+                            <div>Guardian</div>
+                            <div>Points</div>
+                        </div>
+                        {''.join(leaderboard_rows)}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
         else:
             st.info("🌱 Be the first to verify a deed and top the leaderboard!")
