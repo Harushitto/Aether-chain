@@ -1467,6 +1467,20 @@ def _render_profile_overlay(session: Session) -> None:
     st.markdown(f"**Wallet Security Box:** `{wallet_value}`")
     st.markdown(f"**Nature Level:** {level} ({points} XP)")
 
+    if st.button("Close", key="profile_modal_close", use_container_width=True):
+        st.rerun()
+    if st.button("🚪 Logout", use_container_width=True, key="profile_logout"):
+        st.session_state.logged_in = False
+        st.session_state.username = None
+        st.session_state.wallet_address = None
+        st.session_state.profile_image_ref = None
+        st.session_state.profile_image_preview = None
+        st.session_state.authenticated = False
+        st.session_state.wallet_verified = False
+        st.session_state.verified_wallet_input = ""
+        st.session_state.share_message = ""
+        st.rerun()
+
 
 @st.dialog("🌱 Help Desk", width="large")
 def _render_help_desk() -> None:
@@ -1515,6 +1529,36 @@ def render_leaderboard_section(session: Session) -> None:
         st.info("📊 Leaderboard is being initialized. Check back soon!")
 
 
+@st.dialog("📊 Leaderboard & Stats", width="large")
+def _render_stats_overlay(session: Session) -> None:
+    """Leaderboard and personal XP stats modal."""
+    user_points = get_user_total_points(session, st.session_state.username)
+    title = get_guardian_title(user_points)
+    rank = get_user_rank(session, st.session_state.username or "")
+    st.markdown(f"**Guardian:** {st.session_state.username or 'Guardian'}")
+    st.markdown(f"**Total XP:** {user_points}")
+    st.markdown(f"**Nature Level:** {title}")
+    st.markdown(f"**Global Rank:** #{rank if rank else 'N/A'}")
+    st.markdown("---")
+    st.markdown("### 🏆 Leaderboard")
+    try:
+        leaderboard_df = get_leaderboard_df(session).to_pandas()
+        if not leaderboard_df.empty:
+            leaderboard_df["USERNAME"] = leaderboard_df["USERNAME"].astype(str).str.upper()
+            leaderboard_df["POINTS"] = pd.to_numeric(leaderboard_df["POINTS"], errors="coerce").fillna(0).astype(int)
+            leaderboard_df = leaderboard_df.groupby("USERNAME", as_index=False)["POINTS"].sum()
+            leaderboard_df = leaderboard_df.sort_values(by="POINTS", ascending=False, kind="stable").head(20).reset_index(drop=True)
+            leaderboard_df.insert(0, "RANK", range(1, len(leaderboard_df) + 1))
+            leaderboard_df.insert(1, "LEVEL", leaderboard_df["POINTS"].apply(get_guardian_title))
+            st.dataframe(leaderboard_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("🌱 Be the first to verify a deed and top the leaderboard!")
+    except Exception:
+        st.info("📊 Leaderboard is being initialized. Check back soon!")
+    if st.button("Close", key="stats_modal_close", use_container_width=True):
+        st.rerun()
+
+
 def get_user_rank(session: Session, username: str) -> Optional[int]:
     """Return 1-indexed rank based on total XP across guardians."""
     if not username:
@@ -1541,6 +1585,13 @@ def render_sidebar_menu(session: Session) -> None:
             _render_profile_overlay(session)
         if st.button("Help Desk", key="sidebar_help", use_container_width=True):
             _render_help_desk()
+        st.markdown("### ⋮ Menu")
+        if st.button("👤 Profile", key="sidebar_profile", use_container_width=True):
+            _render_profile_overlay(session)
+        if st.button("🆘 Help Desk", key="sidebar_help", use_container_width=True):
+            _render_help_desk()
+        if st.button("📊 Leaderboard / Stats", key="sidebar_stats", use_container_width=True):
+            _render_stats_overlay(session)
 
 
 def render_deed_ticker(session: Session) -> None:
