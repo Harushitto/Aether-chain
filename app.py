@@ -72,25 +72,29 @@ st.markdown(
         font-weight: 700;
     }
 
-    .stButton > button {
+    .stButton > button,
+    .stFormSubmitButton > button {
         background: linear-gradient(135deg, #2db968 0%, #1a8f4f 100%);
         color: #ffffff;
-        border: none;
+        border: 1px solid rgba(151, 255, 196, 0.45);
         border-radius: 12px;
         padding: 12px 24px;
-        font-weight: 600;
+        font-weight: 700;
         font-size: 1rem;
+        letter-spacing: 0.2px;
         transition: all 0.3s ease;
         box-shadow: 0 4px 15px rgba(45, 185, 104, 0.3);
     }
 
-    .stButton > button:hover {
+    .stButton > button:hover,
+    .stFormSubmitButton > button:hover {
         background: linear-gradient(135deg, #1a8f4f 0%, #0d5c2c 100%);
         box-shadow: 0 6px 20px rgba(45, 185, 104, 0.5);
         transform: translateY(-2px);
     }
 
-    .stButton > button[kind="primary"]:hover {
+    .stButton > button[kind="primary"]:hover,
+    .stFormSubmitButton > button[kind="primary"]:hover {
         box-shadow: 0 0 18px rgba(45, 185, 104, 0.95), 0 0 32px rgba(26, 143, 79, 0.7);
         filter: brightness(1.08);
     }
@@ -1303,7 +1307,7 @@ def login_page() -> None:
                 key="manual_wallet_input",
                 placeholder="e.g. 9xQeWvG816bUx9EPfPy...",
             )
-            check_in_submit = st.form_submit_button("Sign In / Register", use_container_width=True)
+            check_in_submit = st.form_submit_button("🌿Enter Aether", use_container_width=True)
 
         if check_in_submit:
             submitted_wallet = manual_wallet_input.strip()
@@ -1335,7 +1339,13 @@ def login_page() -> None:
                         st.session_state.wallet_lookup_complete = True
                         st.session_state.needs_username_registration = True
                 except Exception:
-                    st.error("Unable to validate wallet right now. Please try again.")
+                    st.session_state.wallet_address = submitted_wallet
+                    st.session_state.wallet_lookup_complete = True
+                    st.session_state.needs_username_registration = True
+                    st.warning(
+                        "Live wallet validation is temporarily unavailable. "
+                        "You can continue by setting up your guardian profile now."
+                    )
 
         if st.session_state.wallet_lookup_complete and st.session_state.needs_username_registration:
             st.info("🟢 Green Initiation: New wallet detected. Complete your guardian profile.")
