@@ -992,7 +992,16 @@ def generate_username_suggestions(
     suggestions: list[str] = []
     base = chosen_name.strip()
     wallet_suffix = (wallet_address or "").strip()[-4:]
-    candidate_pool = [f"{base}_Nature", f"{base}Nature"]
+    nature_suffixes = [
+        "Sprout",
+        "Leaf",
+        "Grove",
+        "Canopy",
+        "Bloom",
+        "Evergreen",
+    ]
+    candidate_pool = [f"{base}_{suffix}" for suffix in nature_suffixes]
+    candidate_pool.extend([f"{base}Nature", f"{base}_Nature"])
     if wallet_suffix:
         candidate_pool.append(f"{base}_{wallet_suffix}")
 
@@ -1028,6 +1037,17 @@ def create_user_entry(
             )
     except Exception as exc:
         raise RuntimeError("Unable to sync your profile to Snowflake right now.") from exc
+
+
+def username_count_via_sql(session: Session, username: str) -> int:
+    """Run a direct SQL username collision check against Snowflake."""
+    safe_username = (username or "").replace("'", "''")
+    result = session.sql(
+        f"SELECT count(*) AS USER_COUNT FROM {LEADERBOARD_TABLE} WHERE USERNAME = '{safe_username}'"
+    ).collect()
+    if not result:
+        return 0
+    return int(result[0]["USER_COUNT"] or 0)
 
 
 def uploaded_image_to_base64(uploaded_file) -> Optional[str]:
@@ -1318,9 +1338,13 @@ if "verified_wallet_input" not in st.session_state:
 if "nav_open" not in st.session_state:
     st.session_state.nav_open = False
 if "nav_section" not in st.session_state:
-    st.session_state.nav_section = "profile"
+    st.session_state.nav_section = "dashboard"
 if "show_wallet_full" not in st.session_state:
     st.session_state.show_wallet_full = False
+if "last_award_deed" not in st.session_state:
+    st.session_state.last_award_deed = ""
+if "share_message" not in st.session_state:
+    st.session_state.share_message = ""
 
 
 # ============================================================================
@@ -1355,20 +1379,20 @@ def login_page() -> None:
         )
 
         st.markdown('<div class="card-container">', unsafe_allow_html=True)
-        st.markdown("#### 🔐 Manual Login")
+        st.markdown("#### 🔐 Login")
 
         with st.form("manual_login_form"):
             manual_username_input = st.text_input(
                 "Username",
                 key="manual_username_input",
-                placeholder="e.g. Harshit_Oak",
+                placeholder="e.g. Username_oak",
             )
             manual_wallet_input = st.text_input(
                 "Solana Wallet ID",
                 key="manual_wallet_input",
                 placeholder="e.g. 9xQeWvG816bUx9EPfPy...",
             )
-            check_in_submit = st.form_submit_button("Enter Aether", type="primary", use_container_width=True)
+            check_in_submit = st.form_submit_button("🌿 Enter Aether", type="primary", use_container_width=True)
 
         username_input = (st.session_state.get("manual_username_input") or "").strip()
         wallet_input = (st.session_state.get("manual_wallet_input") or "").strip()
@@ -1401,6 +1425,18 @@ def login_page() -> None:
             else:
                 try:
                     session = create_snowflake_session()
+                    username_count = username_count_via_sql(session, username_input)
+                    if username_count > 0:
+                        st.error("This username already exists. Please choose a unique name.")
+                        suggestions = generate_username_suggestions(
+                            username_input,
+                            wallet_input,
+                            get_existing_usernames(session),
+                            total=3,
+                        )
+                        if suggestions:
+                            st.caption("Try one of these nature-themed names: " + " • ".join(suggestions))
+                        st.stop()
                     create_user_entry(session, username_input, wallet_input)
                     st.session_state.wallet_address = wallet_input
                     st.session_state.username = username_input
@@ -1482,6 +1518,7 @@ def _render_profile_overlay(session: Session) -> None:
         st.session_state.wallet_verified = False
         st.session_state.verified_wallet_input = ""
         st.session_state.show_wallet_full = False
+        st.session_state.share_message = ""
         st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1500,6 +1537,24 @@ def _render_help_desk() -> None:
     with st.expander("⬇️ What if verification fails?"):
         st.write("Try a clear daylight image showing your real deed and add specific action details.")
     st.markdown("</div>", unsafe_allow_html=True)
+
+
+def get_user_rank(session: Session, username: str) -> Optional[int]:
+    """Return 1-indexed rank based on total XP across guardians."""
+    if not username:
+        return None
+    leaderboard_df = get_leaderboard_df(session).to_pandas()
+    if leaderboard_df.empty:
+        return None
+    leaderboard_df["USERNAME"] = leaderboard_df["USERNAME"].astype(str).str.upper()
+    leaderboard_df["POINTS"] = pd.to_numeric(leaderboard_df["POINTS"], errors="coerce").fillna(0).astype(int)
+    grouped = leaderboard_df.groupby("USERNAME", as_index=False)["POINTS"].sum()
+    grouped = grouped.sort_values(by="POINTS", ascending=False, kind="stable").reset_index(drop=True)
+    grouped["RANK"] = range(1, len(grouped) + 1)
+    row = grouped[grouped["USERNAME"] == username.upper()]
+    if row.empty:
+        return None
+    return int(row.iloc[0]["RANK"])
 
 
 def render_sleek_navigation(session: Session) -> None:
@@ -1525,8 +1580,10 @@ def render_sleek_navigation(session: Session) -> None:
 
     if st.session_state.nav_section == "help":
         _render_help_desk()
-    else:
+    elif st.session_state.nav_section == "profile":
         _render_profile_overlay(session)
+
+
 def dashboard_page(session: Session) -> None:
     """Render the main dashboard after login."""
     render_sleek_navigation(session)
@@ -1547,81 +1604,7 @@ def dashboard_page(session: Session) -> None:
     """,
         unsafe_allow_html=True,
     )
-    mission_text = "Mission: Reach Earth Legend status by verifying more deeds!"
-    try:
-        preview_points = get_user_total_points(session, st.session_state.username)
-        if get_guardian_title(preview_points) == "Earth Legend":
-            mission_text = "Mission: Maintain Earth Legend status by mentoring and inspiring fellow Guardians!"
-    except Exception:
-        pass
-
-    welcome_col, tip_col = st.columns(2)
-    with welcome_col:
-        st.markdown(
-            f"""
-            <div class="card-container step-card botanical-step">
-                <h3>👋 Welcome, <strong>{html.escape(str(st.session_state.username))}</strong>!</h3>
-                <p><strong>Current Mission:</strong> {mission_text}</p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with tip_col:
-        st.markdown(
-            """
-            <div class="card-container step-card botanical-step">
-                <h3>🌿 Pro-Tip</h3>
-                <p>Did you know? Trees planted in urban areas can reduce local temperatures by up to 8°C!</p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    deed_alert_placeholder = st.empty()
-    if st.session_state.deed_alert_text:
-        deed_alert_placeholder.markdown(
-            f"""
-            <div class="deed-ticker deed-alert">
-                <div class="deed-ticker-track">✨ {st.session_state.deed_alert_text}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    else:
-        deed_alert_placeholder.empty()
-
-    wisdom_text = (
-        st.session_state.daily_wisdom
-        or "🌱 Welcome, Guardian! Upload your first green deed to start your journey."
-    )
-    st.markdown(
-        f"""
-        <div class="quote-banner">
-            {html.escape(wisdom_text)}
-        </div>
-    """,
-        unsafe_allow_html=True,
-    )
-    try:
-        deed_updates = get_recent_deed_feed(session, limit=12)
-    except Exception:
-        deed_updates = []
-
-    deed_ticker_text = (
-        " ✦ ".join(html.escape(item) for item in deed_updates)
-        if deed_updates
-        else "A Guardian has just planted native trees! ✦ A Guardian has just cleaned up a riverbank!"
-    )
-    st.markdown(
-        f"""
-        <div class="deed-ticker">
-            <div class="deed-ticker-track">🌿 {deed_ticker_text}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.markdown("### 🌍 Submit Your Environmental Deed")
+    st.markdown("### 🌍 Deed Submission")
     col1, col2 = st.columns(2)
 
     with col1:
@@ -1736,6 +1719,8 @@ def dashboard_page(session: Session) -> None:
                             st.session_state.deed_alert_time = time.time()
                             st.session_state.last_awarded_points = points
                             st.session_state.last_award_time = time.time()
+                            st.session_state.last_award_deed = action_context
+                            st.session_state.share_message = ""
                             st.markdown(
                                 f"""
                                 <div class="success-modal card-container" style="border: 2px solid #2db968; background: linear-gradient(135deg, #0f3018 0%, #1a8f4f20 100%);">
@@ -1796,6 +1781,38 @@ def dashboard_page(session: Session) -> None:
             """,
                 unsafe_allow_html=True,
             )
+            show_share_cta = (
+                st.session_state.last_awarded_points > 0
+                and bool(st.session_state.last_award_deed)
+                and (time.time() - st.session_state.last_award_time) <= 5
+            )
+            share_slot = st.empty()
+            if show_share_cta:
+                rank = get_user_rank(session, st.session_state.username or "") or "?"
+                share_post = (
+                    f"🛡️ Guardian {st.session_state.username} just ascended!\n"
+                    f"🌿 Deed: {st.session_state.last_award_deed}\n"
+                    f"✨ Gained: +{st.session_state.last_awarded_points} XP | Total: {user_points} XP | Rank: #{rank}\n"
+                    "Join the Aether-Chain and prove your green impact! 🌱"
+                )
+                if share_slot.button(
+                    "🌿 Share your impact",
+                    key=f"share_impact_{int(st.session_state.last_award_time)}",
+                    use_container_width=True,
+                ):
+                    st.session_state.share_message = share_post
+                if st.session_state.share_message:
+                    st.markdown(
+                        f"""
+                        <div class="card-container">
+                            <h4 style="margin: 0 0 8px;">✨ Ready-to-share post</h4>
+                            <p style="white-space: pre-wrap; margin-bottom: 0;">{html.escape(st.session_state.share_message)}</p>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                time.sleep(5)
+                share_slot.empty()
 
         with col2:
             st.markdown(
@@ -1829,7 +1846,7 @@ def dashboard_page(session: Session) -> None:
 
     st.markdown("---")
 
-    st.markdown("### 🏆 Global Leaderboard")
+    st.markdown("### 🏆 Leaderboard")
     try:
         leaderboard_df = get_leaderboard_df(session).to_pandas()
 
