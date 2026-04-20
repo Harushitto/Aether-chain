@@ -377,6 +377,10 @@ st.markdown(
         background: linear-gradient(90deg, #56df92 0%, #2db968 100%);
     }
 
+    .verify-button {
+        animation: pulse-glow 2s ease-in-out infinite;
+    }
+
     .title-pill {
         display: inline-block;
         padding: 6px 12px;
@@ -1289,13 +1293,28 @@ def dashboard_page(session: Session) -> None:
             st.warning("⚠️ You have already submitted this specific upload in this session.")
 
         analyze_clicked = st.button(
-            "✅ Analyze with AI & Record Deed",
+            "✅ Get Deed Points",
             type="primary",
             use_container_width=True,
             disabled=(
                 st.session_state.last_processed_submission_key == submission_key
                 or submission_key in st.session_state.submitted_upload_keys
             ),
+        )
+        st.markdown(
+            """
+            <script>
+            (function () {
+                const buttons = window.parent.document.querySelectorAll('.stButton > button[kind="primary"]');
+                buttons.forEach((button) => {
+                    if (button.innerText && button.innerText.includes('Get Deed Points')) {
+                        button.classList.add('verify-button');
+                    }
+                });
+            })();
+            </script>
+            """,
+            unsafe_allow_html=True,
         )
 
         if analyze_clicked:
@@ -1356,18 +1375,33 @@ def dashboard_page(session: Session) -> None:
         leaderboard_df = get_leaderboard_df(session).to_pandas()
 
         if not leaderboard_df.empty:
+            leaderboard_df.columns = [str(column).upper() for column in leaderboard_df.columns]
+            points_column = "POINTS" if "POINTS" in leaderboard_df.columns else None
+            if points_column is None:
+                st.warning("Leaderboard data is missing the POINTS column; showing 0 pts until synced.")
+                leaderboard_df["POINTS"] = 0
+            else:
+                leaderboard_df["POINTS"] = pd.to_numeric(
+                    leaderboard_df[points_column], errors="coerce"
+                ).fillna(0).astype(int)
             leaderboard_df["USERNAME"] = leaderboard_df["USERNAME"].astype(str).str.upper()
-            leaderboard_df["POINTS"] = pd.to_numeric(leaderboard_df["POINTS"], errors="coerce").fillna(0).astype(int)
             leaderboard_df = leaderboard_df.groupby("USERNAME", as_index=False)["POINTS"].sum()
             leaderboard_df = leaderboard_df.sort_values(by="POINTS", ascending=False, kind="stable").head(20).reset_index(drop=True)
             leaderboard_df.insert(0, "RANK", range(1, len(leaderboard_df) + 1))
             leaderboard_df.insert(1, "LEVEL", leaderboard_df["POINTS"].apply(get_guardian_title))
-            max_points = max(int(leaderboard_df["POINTS"].max()), 1)
             leaderboard_rows: list[str] = []
             for row in leaderboard_df.itertuples(index=False):
                 rank = int(row.RANK)
                 rank_class = f"rank-{rank}" if rank <= 3 else "rank-default"
-                progress_percent = int((int(row.POINTS) / max_points) * 100)
+                current_floor, next_rank_target = get_next_rank_target(int(row.POINTS))
+                if next_rank_target is None:
+                    progress_percent = 100
+                else:
+                    span = max(next_rank_target - current_floor, 1)
+                    progress_percent = int(
+                        ((int(row.POINTS) - current_floor) / span) * 100
+                    )
+                    progress_percent = max(0, min(progress_percent, 100))
                 badge = "🥇" if rank == 1 else "🥈" if rank == 2 else "🥉" if rank == 3 else "🌿"
                 leaderboard_rows.append(
                     f"""
@@ -1385,8 +1419,7 @@ def dashboard_page(session: Session) -> None:
                     """
                 )
 
-            st.markdown(
-                f"""
+            leaderboard_html = f"""
                 <div class="leaderboard-shell">
                     <div class="leaderboard-table">
                         <div class="leaderboard-header">
@@ -1398,8 +1431,19 @@ def dashboard_page(session: Session) -> None:
                         {''.join(leaderboard_rows)}
                     </div>
                 </div>
+                """
+            st.components.v1.html(
+                f"""
+                <style>
+                    body {{
+                        margin: 0;
+                        background: transparent;
+                    }}
+                </style>
+                {leaderboard_html}
                 """,
-                unsafe_allow_html=True,
+                height=max(220, 78 + (len(leaderboard_rows) * 92)),
+                scrolling=False,
             )
         else:
             st.info("🌱 Be the first to verify a deed and top the leaderboard!")
