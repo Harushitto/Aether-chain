@@ -1879,28 +1879,32 @@ def dashboard_page(session: Session) -> None:
 # ============================================================================
 # 9. MAIN EXECUTION
 # ============================================================================
-def main() -> None:
-    configure_gemini()
-    try:
-        session = create_snowflake_session()
-    except SNOWPARK_RETRYABLE_EXCEPTIONS:
-        st.error("Snowflake connection timed out before the app finished loading.")
-        if st.button("Reconnect", key="snowflake_reconnect_button"):
-            reset_snowflake_session()
-            st.rerun()
-        return
-    except RuntimeError:
-        st.error("Snowflake connection failed. Please verify credentials and reconnect.")
-        if st.button("Reconnect", key="snowflake_reconnect_runtime_button"):
-            reset_snowflake_session()
-            st.rerun()
-        return
+
+def main():
+    # Initialize session state
+    if "authenticated" not in st.session_state:
+        st.session_state.authenticated = False
 
     if not st.session_state.authenticated:
-        login_page()
+        st.markdown('<div class="nature-panel">', unsafe_allow_html=True)
+        st.title("🌱 Aether-Chain Login")
+        wallet = st.text_input("Enter Solana Wallet Address", placeholder="e.g. 7xKX...j9")
+        
+        if st.button("🌿 Enter the Aether", kind="primary"):
+            if SOLANA_WALLET_PATTERN.match(wallet):
+                # Here you would call your Snowflake logic to verify
+                st.session_state.authenticated = True
+                st.session_state.wallet_address = wallet
+                st.rerun()
+            else:
+                st.error("Invalid Solana Wallet format.")
+        st.markdown('</div>', unsafe_allow_html=True)
     else:
-        dashboard_page(session)
-
+        st.success(f"Welcome back, {st.session_state.wallet_address}!")
+        if st.button("Logout"):
+            st.session_state.authenticated = False
+            st.rerun()
 
 if __name__ == "__main__":
     main()
+
