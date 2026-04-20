@@ -579,6 +579,13 @@ def shorten_wallet_address(wallet_address: str) -> str:
     return f"{cleaned[:4]}...{cleaned[-3:]}"
 
 
+def verify_wallet(wallet_input: str) -> tuple[bool, str]:
+    """Validate and normalize a Solana wallet address from text input."""
+    normalized_wallet = (wallet_input or "").strip()
+    is_verified = bool(SOLANA_WALLET_PATTERN.fullmatch(normalized_wallet))
+    return is_verified, normalized_wallet
+
+
 def normalize_action_context(action_context: str) -> str:
     """Fix common spelling mistakes in deed descriptions."""
     normalized = action_context
@@ -1230,6 +1237,10 @@ if "registration_username_value" not in st.session_state:
     st.session_state.registration_username_value = ""
 if "registration_suggestions" not in st.session_state:
     st.session_state.registration_suggestions = []
+if "wallet_verified" not in st.session_state:
+    st.session_state.wallet_verified = False
+if "verified_wallet_input" not in st.session_state:
+    st.session_state.verified_wallet_input = ""
 
 
 # ============================================================================
@@ -1263,6 +1274,8 @@ def complete_manual_login(wallet_address: str, username: str) -> None:
         st.session_state.user_xp = get_user_total_points(session, username)
         st.session_state.logged_in = True
         st.session_state.authenticated = True
+        st.session_state.wallet_verified = True
+        st.session_state.verified_wallet_input = wallet_address
         st.session_state.needs_username_registration = False
         st.session_state.wallet_lookup_complete = False
         st.session_state.daily_wisdom = generate_daily_wisdom()
@@ -1313,11 +1326,20 @@ def login_page() -> None:
             )
             check_in_submit = st.form_submit_button("🌿Enter Aether", use_container_width=True)
 
+        wallet_is_verified, normalized_wallet_preview = verify_wallet(manual_wallet_input)
+        if normalized_wallet_preview and wallet_is_verified:
+            st.success("✅ Wallet format verified.")
+        elif normalized_wallet_preview:
+            st.warning("Wallet format is not a valid Solana Base58 address yet.")
+
         if check_in_submit:
-            submitted_wallet = manual_wallet_input.strip()
+            wallet_is_verified, submitted_wallet = verify_wallet(manual_wallet_input)
+            st.session_state.wallet_verified = wallet_is_verified
+            st.session_state.verified_wallet_input = submitted_wallet
+
             if not submitted_wallet:
                 st.error("Please enter your Wallet ID to continue.")
-            elif not SOLANA_WALLET_PATTERN.fullmatch(submitted_wallet):
+            elif not wallet_is_verified:
                 st.error("Invalid Solana Wallet ID format.")
             else:
                 st.session_state.last_wallet_lookup = submitted_wallet
@@ -1335,6 +1357,8 @@ def login_page() -> None:
                         st.session_state.authenticated = True
                         st.session_state.needs_username_registration = False
                         st.session_state.wallet_lookup_complete = False
+                        st.session_state.wallet_verified = True
+                        st.session_state.verified_wallet_input = submitted_wallet
                         st.session_state.registration_suggestions = []
                         st.session_state.registration_username_value = ""
                         st.session_state.daily_wisdom = generate_daily_wisdom()
@@ -1343,6 +1367,8 @@ def login_page() -> None:
                         st.session_state.wallet_address = submitted_wallet
                         st.session_state.wallet_lookup_complete = True
                         st.session_state.needs_username_registration = True
+                        st.session_state.wallet_verified = True
+                        st.session_state.verified_wallet_input = submitted_wallet
                         st.session_state.registration_suggestions = []
                         st.session_state.registration_username_value = ""
                 except Exception:
@@ -1544,6 +1570,8 @@ def render_profile_dashboard(session: Session) -> None:
             st.session_state.profile_image_preview = None
             st.session_state.profile_edit_mode = False
             st.session_state.authenticated = False
+            st.session_state.wallet_verified = False
+            st.session_state.verified_wallet_input = ""
             st.rerun()
 def dashboard_page(session: Session) -> None:
     """Render the main dashboard after login."""
