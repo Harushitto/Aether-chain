@@ -460,23 +460,21 @@ st.markdown(
         background: var(--card-bg);
     }
 
-    .menu-trigger {
-        position: fixed;
-        top: 18px;
-        left: 16px;
-        z-index: 1200;
-    }
-
-    .menu-trigger button {
-        width: 48px !important;
-        height: 48px !important;
-        border-radius: 10px !important;
-        font-size: 1.6rem !important;
-        background: rgba(13, 92, 44, 0.9) !important;
-        color: var(--text-light) !important;
-        border: 1px solid var(--accent-green) !important;
-        box-shadow: 0 0 16px rgba(45, 185, 104, 0.55) !important;
-        padding: 0 !important;
+    .sidebar-three-dots {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 100%;
+        height: 42px;
+        border-radius: 10px;
+        border: 1px solid rgba(45, 185, 104, 0.55);
+        background: rgba(13, 92, 44, 0.65);
+        box-shadow: 0 0 14px rgba(45, 185, 104, 0.35);
+        font-size: 1.45rem;
+        font-weight: 800;
+        letter-spacing: 1px;
+        color: #d9ffe8;
+        margin: 2px 0 12px;
     }
 
     .slide-nav {
@@ -1494,8 +1492,41 @@ def _render_help_desk() -> None:
         st.write("Nature Level is based on your cumulative XP from verified environmental deeds.")
     with st.expander("⬇️ What if verification fails?"):
         st.write("Try a clear daylight image showing your real deed and add specific action details.")
-    if st.button("Close", key="help_modal_close", use_container_width=True):
-        st.rerun()
+
+
+def render_leaderboard_section(session: Session) -> None:
+    """Render leaderboard/stats section at the bottom of the main dashboard."""
+    st.markdown("---")
+    st.markdown("### 🏆 Leaderboard / Stats")
+    try:
+        user_points = get_user_total_points(session, st.session_state.username)
+        rank = get_user_rank(session, st.session_state.username or "")
+        level = get_guardian_title(user_points)
+        st.markdown(
+            f"""
+            <div class="status-card" style="margin-bottom: 14px;">
+                <strong>Guardian:</strong> {html.escape(st.session_state.username or 'Guardian')} &nbsp;|&nbsp;
+                <strong>Total XP:</strong> {user_points} &nbsp;|&nbsp;
+                <strong>Level:</strong> {html.escape(level)} &nbsp;|&nbsp;
+                <strong>Rank:</strong> #{rank if rank else 'N/A'}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        leaderboard_df = get_leaderboard_df(session).to_pandas()
+        if not leaderboard_df.empty:
+            leaderboard_df["USERNAME"] = leaderboard_df["USERNAME"].astype(str).str.upper()
+            leaderboard_df["POINTS"] = pd.to_numeric(leaderboard_df["POINTS"], errors="coerce").fillna(0).astype(int)
+            leaderboard_df = leaderboard_df.groupby("USERNAME", as_index=False)["POINTS"].sum()
+            leaderboard_df = leaderboard_df.sort_values(by="POINTS", ascending=False, kind="stable").head(20).reset_index(drop=True)
+            leaderboard_df.insert(0, "RANK", range(1, len(leaderboard_df) + 1))
+            leaderboard_df.insert(1, "LEVEL", leaderboard_df["POINTS"].apply(get_guardian_title))
+            st.dataframe(leaderboard_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("🌱 Be the first to verify a deed and top the leaderboard!")
+    except Exception:
+        st.info("📊 Leaderboard is being initialized. Check back soon!")
 
 
 @st.dialog("📊 Leaderboard & Stats", width="large")
@@ -1549,6 +1580,11 @@ def get_user_rank(session: Session, username: str) -> Optional[int]:
 def render_sidebar_menu(session: Session) -> None:
     """Render the three-dot sidebar menu with all auxiliary navigation."""
     with st.sidebar:
+        st.markdown('<div class="sidebar-three-dots">⋮</div>', unsafe_allow_html=True)
+        if st.button("Profile", key="sidebar_profile", use_container_width=True):
+            _render_profile_overlay(session)
+        if st.button("Help Desk", key="sidebar_help", use_container_width=True):
+            _render_help_desk()
         st.markdown("### ⋮ Menu")
         if st.button("👤 Profile", key="sidebar_profile", use_container_width=True):
             _render_profile_overlay(session)
@@ -1746,6 +1782,8 @@ def dashboard_page(session: Session) -> None:
                         st.error(f"❌ Verification failed: {str(e)}")
 
         st.markdown("</div>", unsafe_allow_html=True)
+
+    render_leaderboard_section(session)
 
 
 
