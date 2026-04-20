@@ -5,6 +5,8 @@ import random
 import time
 import textwrap
 import base64
+from contextlib import contextmanager
+from queue import Empty, Queue
 from typing import Optional
 
 import google.generativeai as genai
@@ -596,44 +598,138 @@ SNOWPARK_RETRYABLE_EXCEPTIONS = tuple(
 )
 
 
-def _is_session_valid(session: Session) -> bool:
-    """Return True when the existing Snowflake session still accepts queries."""
-    try:
+REQUIRED_SNOWFLAKE_SECRETS = (
+    "account",
+    "user",
+    "password",
+    "warehouse",
+    "database",
+    "schema",
+    "role",
+)
+
+
+def _snowflake_missing_secret_message() -> str:
+    """Return an actionable error message for missing Snowflake secrets."""
+    snowflake_secrets = st.secrets.get("snowflake", {})
+    for key in REQUIRED_SNOWFLAKE_SECRETS:
+        value = str(snowflake_secrets.get(key, "")).strip()
+        if not value:
+            return f"Snowflake connection failed. Check if {key} is defined in secrets."
+    return (
+        "Snowflake connection failed after retry. "
+        "Verify credentials and network reachability for your Snowflake account."
+    )
+
+
+class SnowflakeSessionPool:
+    """Small in-app pool for Snowflake sessions."""
+
+    def __init__(self, configs: dict, max_size: int = 2):
+        self.configs = configs
+        self.max_size = max_size
+        self._queue: Queue[Session] = Queue(maxsize=max_size)
+
+    def _new_session(self) -> Session:
+        return Session.builder.configs(self.configs).create()
+
+    def _heartbeat(self, session: Session) -> None:
         session.sql("SELECT 1").collect()
-        return True
+
+    def acquire(self) -> Session:
+        try:
+            session = self._queue.get_nowait()
+        except Empty:
+            session = self._new_session()
+        self._heartbeat(session)
+        return session
+
+    def release(self, session: Session) -> None:
+        if session is None:
+            return
+        try:
+            self._queue.put_nowait(session)
+        except Exception:
+            try:
+                session.close()
+            except Exception:
+                pass
+
+    def clear(self) -> None:
+        while not self._queue.empty():
+            try:
+                session = self._queue.get_nowait()
+            except Empty:
+                break
+            try:
+                session.close()
+            except Exception:
+                pass
+
+
+@st.cache_resource(show_spinner=False)
+def get_snowflake_session_pool() -> SnowflakeSessionPool:
+    """Create a cached Snowflake pool resource."""
+    return SnowflakeSessionPool(dict(st.secrets.get("snowflake", {})))
+
+
+def _validate_session_or_retry(pool: SnowflakeSessionPool, *, allow_retry: bool) -> Session:
+    """Acquire pooled session, run heartbeat, and self-heal once on failure."""
+    try:
+        return pool.acquire()
     except SNOWPARK_RETRYABLE_EXCEPTIONS:
-        return False
+        if not allow_retry:
+            raise
+        st.cache_resource.clear()
+        refreshed_pool = get_snowflake_session_pool()
+        return _validate_session_or_retry(refreshed_pool, allow_retry=False)
 
 
 def reset_snowflake_session() -> None:
-    """Close and remove any cached Snowflake session from Streamlit state."""
-    existing_session = st.session_state.get("snowflake_session")
-    if existing_session is not None:
-        try:
-            existing_session.close()
-        except Exception:
-            pass
+    """Clear cached Snowflake pool and release active session handle."""
+    active_session = st.session_state.get("snowflake_session")
+    pool = st.session_state.get("snowflake_pool")
+    if pool is not None and active_session is not None:
+        pool.release(active_session)
     st.session_state.pop("snowflake_session", None)
+    st.session_state.pop("snowflake_pool", None)
+    st.cache_resource.clear()
 
 
 def create_snowflake_session() -> Session:
-    """Create/reuse a Snowflake session and auto-reconnect after timeout."""
+    """Create/reuse a pooled Snowflake session with one self-healing reconnect."""
     existing_session = st.session_state.get("snowflake_session")
-    if existing_session is not None and _is_session_valid(existing_session):
-        return existing_session
-
-    if existing_session is not None:
-        reset_snowflake_session()
-
+    pool = st.session_state.get("snowflake_pool")
+    if existing_session is not None and pool is not None:
+        try:
+            existing_session.sql("SELECT 1").collect()
+            return existing_session
+        except SNOWPARK_RETRYABLE_EXCEPTIONS:
+            pool.release(existing_session)
+            st.session_state.pop("snowflake_session", None)
     try:
-        session = Session.builder.configs(st.secrets["snowflake"]).create()
+        pool = get_snowflake_session_pool()
+        session = _validate_session_or_retry(pool, allow_retry=True)
+        st.session_state.snowflake_pool = pool
         st.session_state.snowflake_session = session
         return session
-    except SNOWPARK_RETRYABLE_EXCEPTIONS as e:
-        raise RuntimeError(
-            "Failed to create Snowflake session. Verify Streamlit secrets for "
-            "account, user, password/authenticator, role, warehouse, database, and schema."
-        ) from e
+    except (SNOWPARK_RETRYABLE_EXCEPTIONS, KeyError):
+        st.error(_snowflake_missing_secret_message())
+        raise RuntimeError("Snowflake session unavailable after retry.")
+
+
+@contextmanager
+def pooled_session() -> Session:
+    """Yield a session from the pool and return it when done."""
+    session = create_snowflake_session()
+    try:
+        yield session
+    finally:
+        pool = st.session_state.get("snowflake_pool")
+        if pool is not None:
+            pool.release(session)
+        if st.session_state.get("snowflake_session") is session:
+            st.session_state.pop("snowflake_session", None)
 
 
 def get_leaderboard_df(session: Session):
@@ -830,12 +926,33 @@ def generate_username_suggestions(
     return suggestions
 
 
-def create_user_entry(session: Session, username: str, wallet_address: str) -> None:
+def create_user_entry(
+    session: Session,
+    username: str,
+    wallet_address: str,
+    image_hash: Optional[str] = None,
+) -> None:
     """Create a new user entry in the leaderboard if they don't exist."""
     try:
         ensure_profile_row_exists(session, username, wallet_address)
+        if image_hash:
+            update_wallet_profile(
+                session,
+                wallet_address,
+                profile_image_ref=image_hash,
+            )
     except Exception as exc:
         raise RuntimeError("Unable to sync your profile to Snowflake right now.") from exc
+
+
+def uploaded_image_to_base64(uploaded_file) -> Optional[str]:
+    """Convert an uploaded image file to a base64 payload."""
+    if uploaded_file is None:
+        return None
+    file_bytes = uploaded_file.getvalue()
+    if not file_bytes:
+        return None
+    return base64.b64encode(file_bytes).decode("utf-8")
 
 
 def get_user_total_points(session: Session, username: str) -> int:
@@ -1071,6 +1188,8 @@ def verify_deed_with_gemini(image: Image.Image, action_context: str) -> tuple[bo
 # ============================================================================
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
 if "username" not in st.session_state:
     st.session_state.username = None
 if "wallet_address" not in st.session_state:
@@ -1101,6 +1220,8 @@ if "profile_image_ref" not in st.session_state:
     st.session_state.profile_image_ref = None
 if "profile_image_preview" not in st.session_state:
     st.session_state.profile_image_preview = None
+if "last_wallet_lookup" not in st.session_state:
+    st.session_state.last_wallet_lookup = None
 
 
 # ============================================================================
@@ -1133,6 +1254,7 @@ def complete_manual_login(wallet_address: str, username: str) -> None:
         st.session_state.profile_image_preview = None
         st.session_state.user_xp = get_user_total_points(session, username)
         st.session_state.logged_in = True
+        st.session_state.authenticated = True
         st.session_state.needs_username_registration = False
         st.session_state.wallet_lookup_complete = False
         st.session_state.daily_wisdom = generate_daily_wisdom()
@@ -1180,13 +1302,10 @@ def login_page() -> None:
             key="manual_wallet_input",
             placeholder="e.g. 9xQeWvG816bUx9EPfPy...",
         )
-        manual_submit = st.button("Continue", use_container_width=True, key="wallet_lookup_continue")
-
-        if manual_submit:
-            submitted_wallet = manual_wallet_input.strip()
-            if not submitted_wallet:
-                st.error("Please enter your Wallet ID before submitting.")
-            elif not SOLANA_WALLET_PATTERN.fullmatch(submitted_wallet):
+        submitted_wallet = manual_wallet_input.strip()
+        if submitted_wallet and submitted_wallet != st.session_state.last_wallet_lookup:
+            st.session_state.last_wallet_lookup = submitted_wallet
+            if not SOLANA_WALLET_PATTERN.fullmatch(submitted_wallet):
                 st.error("Invalid Solana Wallet ID format.")
             else:
                 try:
@@ -1200,6 +1319,7 @@ def login_page() -> None:
                         st.session_state.profile_image_preview = None
                         st.session_state.user_xp = get_user_total_points(session, existing_wallet_username)
                         st.session_state.logged_in = True
+                        st.session_state.authenticated = True
                         st.session_state.needs_username_registration = False
                         st.session_state.wallet_lookup_complete = False
                         st.session_state.daily_wisdom = generate_daily_wisdom()
@@ -1210,21 +1330,60 @@ def login_page() -> None:
                         st.session_state.wallet_lookup_complete = True
                         st.session_state.needs_username_registration = True
                 except Exception:
-                    st.error("Database Connection Timeout. Please check your Snowflake secrets.")
+                    pass
 
         if st.session_state.wallet_lookup_complete and st.session_state.needs_username_registration:
-            st.info("New wallet detected. Register your Guardian Name.")
-            registration_username = st.text_input(
-                "Register Guardian Name",
-                key="register_guardian_name",
-                placeholder="Choose a unique guardian name",
-            )
-            if st.button("Register & Enter", use_container_width=True, key="register_guardian_submit"):
+            st.info("🟢 Green Initiation: New wallet detected. Complete your guardian profile.")
+            with st.form("green_initiation_form"):
+                registration_username = st.text_input(
+                    "Choose Username",
+                    key="register_guardian_name",
+                    placeholder="Choose a unique guardian name",
+                )
+                initiation_image = st.file_uploader(
+                    "Optional Profile Picture",
+                    type=["jpg", "jpeg", "png"],
+                    key="green_initiation_image",
+                )
+                register_submit = st.form_submit_button("Begin Journey", use_container_width=True)
+
+            if register_submit:
                 candidate_name = registration_username.strip()
                 if not candidate_name:
                     st.error("Please enter a Guardian Name before continuing.")
                 else:
-                    complete_manual_login(st.session_state.wallet_address or "", candidate_name)
+                    try:
+                        session = create_snowflake_session()
+                        existing_usernames = get_existing_usernames(session)
+                        if candidate_name.upper() in existing_usernames:
+                            st.warning("Username already taken.")
+                            suggestions = generate_username_suggestions(
+                                candidate_name,
+                                st.session_state.wallet_address or "",
+                                existing_usernames,
+                            )
+                            if suggestions:
+                                st.info("Try one of these available usernames: " + ", ".join(suggestions))
+                        else:
+                            image_payload = uploaded_image_to_base64(initiation_image)
+                            create_user_entry(
+                                session,
+                                candidate_name,
+                                st.session_state.wallet_address or "",
+                                image_hash=image_payload,
+                            )
+                            st.session_state.username = candidate_name
+                            st.session_state.profile_image_ref = image_payload
+                            st.session_state.profile_image_preview = None
+                            st.session_state.user_xp = get_user_total_points(session, candidate_name)
+                            st.session_state.logged_in = True
+                            st.session_state.authenticated = True
+                            st.session_state.needs_username_registration = False
+                            st.session_state.wallet_lookup_complete = False
+                            st.session_state.daily_wisdom = generate_daily_wisdom()
+                            st.rerun()
+                    except Exception:
+                        st.error("Unable to complete Green Initiation right now.")
 
         wallet_address = (st.session_state.wallet_address or "").strip()
 
@@ -1250,6 +1409,8 @@ def _profile_avatar_data_uri() -> str:
         return DEFAULT_PROFILE_AVATAR
     if profile_ref.startswith("data:image/"):
         return profile_ref
+    if profile_ref:
+        return f"data:image/png;base64,{profile_ref}"
     return profile_ref or DEFAULT_PROFILE_AVATAR
 
 
@@ -1327,18 +1488,19 @@ def render_profile_dashboard(session: Session) -> None:
             key="profile_image_upload",
         )
         if profile_upload is not None and st.button("Save Profile Picture", key="save_profile_picture"):
-            file_bytes = profile_upload.getvalue()
-            mime = profile_upload.type or "image/png"
-            profile_image_data_uri = f"data:{mime};base64,{base64.b64encode(file_bytes).decode('utf-8')}"
-            update_wallet_profile(
-                session,
-                st.session_state.wallet_address or "",
-                profile_image_ref=profile_image_data_uri,
-            )
-            st.session_state.profile_image_ref = profile_image_data_uri
-            st.session_state.profile_image_preview = profile_image_data_uri
-            st.success("Profile picture synced to Snowflake.")
-            st.rerun()
+            profile_image_base64 = uploaded_image_to_base64(profile_upload)
+            if not profile_image_base64:
+                st.error("Couldn't read uploaded image. Please try another file.")
+            else:
+                update_wallet_profile(
+                    session,
+                    st.session_state.wallet_address or "",
+                    profile_image_ref=profile_image_base64,
+                )
+                st.session_state.profile_image_ref = profile_image_base64
+                st.session_state.profile_image_preview = f"data:image/png;base64,{profile_image_base64}"
+                st.success("Profile picture synced to Snowflake.")
+                st.rerun()
 
         if st.button("🚪 Logout", use_container_width=True, key="profile_logout"):
             st.session_state.logged_in = False
@@ -1347,6 +1509,7 @@ def render_profile_dashboard(session: Session) -> None:
             st.session_state.profile_image_ref = None
             st.session_state.profile_image_preview = None
             st.session_state.profile_edit_mode = False
+            st.session_state.authenticated = False
             st.rerun()
 def dashboard_page(session: Session) -> None:
     """Render the main dashboard after login."""
@@ -1733,7 +1896,7 @@ def main() -> None:
             st.rerun()
         return
 
-    if not st.session_state.logged_in:
+    if not st.session_state.authenticated:
         login_page()
     else:
         dashboard_page(session)
