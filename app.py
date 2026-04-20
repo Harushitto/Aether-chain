@@ -1,9 +1,7 @@
 import re
 import hashlib
 import html
-import random
 import time
-import textwrap
 import base64
 from contextlib import contextmanager
 from queue import Empty, Queue
@@ -342,197 +340,6 @@ st.markdown(
         pointer-events: none;
     }
 
-    .verify-button button {
-        animation: pulse-glow 1.9s ease-in-out infinite;
-    }
-
-    .nature-panel {
-        position: relative;
-        overflow: hidden;
-        border: 1px solid rgba(45, 185, 104, 0.45);
-        border-radius: 14px;
-        padding: 20px;
-        margin-top: 18px;
-        background:
-            linear-gradient(135deg, rgba(9, 27, 16, 0.85), rgba(16, 62, 32, 0.7)),
-            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220' viewBox='0 0 220 220'%3E%3Cg fill='none' stroke='%233ecf78' stroke-opacity='0.2' stroke-width='1.2'%3E%3Cpath d='M30 192c38-42 68-100 72-164'/%3E%3Cpath d='M108 174c20-24 40-58 46-102'/%3E%3Cpath d='M24 138c16-8 28-22 38-38'/%3E%3Cpath d='M130 126c16-12 22-26 28-46'/%3E%3C/g%3E%3C/svg%3E");
-        background-size: cover, 220px 220px;
-        backdrop-filter: blur(3px);
-    }
-
-    .leaderboard-shell {
-        border-radius: 16px;
-        padding: 10px;
-        background: rgba(14, 44, 24, 0.4);
-        border: 1px solid rgba(115, 255, 170, 0.25);
-        box-shadow: inset 0 0 0 1px rgba(16, 82, 40, 0.5), 0 8px 28px rgba(0, 0, 0, 0.25);
-        backdrop-filter: blur(10px);
-    }
-
-    .leaderboard-table {
-        width: 100%;
-        border-collapse: separate;
-        border-spacing: 0 10px;
-    }
-
-    .leaderboard-table thead th {
-        color: #7ef0ac;
-        text-align: left;
-        font-size: 0.9rem;
-        padding: 6px 12px 10px;
-    }
-
-    .leaderboard-table tbody tr {
-        background: rgba(7, 26, 14, 0.65);
-        border-radius: 12px;
-        overflow: hidden;
-    }
-
-    .leaderboard-table tbody td {
-        padding: 12px;
-        border-top: 1px solid rgba(80, 209, 130, 0.2);
-        border-bottom: 1px solid rgba(80, 209, 130, 0.2);
-    }
-
-    .leaderboard-table tbody td:first-child {
-        border-left: 4px solid rgba(80, 209, 130, 0.35);
-        border-top-left-radius: 12px;
-        border-bottom-left-radius: 12px;
-        width: 70px;
-        font-weight: 700;
-    }
-
-    .leaderboard-table tbody td:last-child {
-        border-right: 1px solid rgba(80, 209, 130, 0.2);
-        border-top-right-radius: 12px;
-        border-bottom-right-radius: 12px;
-        color: #46ff99;
-        font-weight: 800;
-        text-shadow: 0 0 8px rgba(45, 185, 104, 0.45);
-    }
-
-    .leaderboard-table tbody tr.rank-1 td:first-child { border-left-color: #d4af37; }
-    .leaderboard-table tbody tr.rank-2 td:first-child { border-left-color: #c0c0c0; }
-    .leaderboard-table tbody tr.rank-3 td:first-child { border-left-color: #cd7f32; }
-
-    .profile-icon-wrap {
-        position: fixed;
-        top: 20px;
-        right: 22px;
-        z-index: 999;
-    }
-
-    .profile-icon-wrap button {
-        width: 62px !important;
-        height: 62px !important;
-        border-radius: 50% !important;
-        border: 2px solid var(--accent-green) !important;
-        box-shadow: 0 0 10px var(--accent-green) !important;
-        padding: 0 !important;
-        overflow: hidden !important;
-        background: var(--card-bg) !important;
-    }
-
-    .profile-dashboard-shell {
-        background: var(--card-bg);
-        border: 1px solid var(--accent-green);
-        border-radius: 16px;
-        padding: 16px;
-        box-shadow: 0 0 16px rgba(45, 185, 104, 0.45);
-        margin-bottom: 16px;
-    }
-
-    .dashboard-avatar {
-        width: 120px;
-        height: 120px;
-        border-radius: 50%;
-        border: 2px solid var(--accent-green);
-        box-shadow: 0 0 10px var(--accent-green);
-        object-fit: cover;
-    }
-
-    .profile-corner-avatar {
-        width: 62px;
-        height: 62px;
-        border-radius: 50%;
-        border: 2px solid var(--accent-green);
-        box-shadow: 0 0 10px var(--accent-green);
-        object-fit: cover;
-        background: var(--card-bg);
-    }
-
-    .menu-trigger {
-        position: fixed;
-        top: 18px;
-        left: 16px;
-        z-index: 1200;
-    }
-
-    .menu-trigger button {
-        width: 48px !important;
-        height: 48px !important;
-        border-radius: 10px !important;
-        font-size: 1.6rem !important;
-        background: rgba(13, 92, 44, 0.9) !important;
-        color: var(--text-light) !important;
-        border: 1px solid var(--accent-green) !important;
-        box-shadow: 0 0 16px rgba(45, 185, 104, 0.55) !important;
-        padding: 0 !important;
-    }
-
-    .slide-nav {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 270px;
-        height: 100vh;
-        padding: 90px 20px 20px;
-        background: linear-gradient(135deg, rgba(10, 31, 18, 0.96), rgba(13, 92, 44, 0.94));
-        border-right: 1px solid rgba(45, 185, 104, 0.45);
-        box-shadow: 12px 0 28px rgba(0, 0, 0, 0.35);
-        z-index: 1100;
-        transition: transform 0.35s ease;
-    }
-
-    .slide-nav.open { transform: translateX(0); }
-    .slide-nav.closed { transform: translateX(-105%); }
-
-    .overlay-card {
-        max-width: 760px;
-        margin: 24px auto;
-        border: 1px solid var(--accent-green);
-        border-radius: 18px;
-        background: rgba(12, 41, 23, 0.88);
-        padding: 24px;
-        box-shadow: 0 0 18px rgba(45, 185, 104, 0.35);
-    }
-
-    .profile-head {
-        position: relative;
-        width: 120px;
-        margin: 0 auto 14px;
-        text-align: center;
-    }
-
-    .avatar-update-btn {
-        position: absolute;
-        right: -8px;
-        bottom: 4px;
-        background: var(--accent-green);
-        color: #0a1f12;
-        font-size: 0.7rem;
-        border-radius: 999px;
-        padding: 4px 8px;
-        font-weight: 700;
-    }
-
-    .faq-shell .stExpander {
-        border: 1px solid rgba(45, 185, 104, 0.45) !important;
-        border-radius: 12px !important;
-        background: rgba(15, 48, 24, 0.72) !important;
-        margin-bottom: 8px !important;
-    }
-
     .success-modal {
         animation: modal-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
         border: 1px solid rgba(115, 255, 170, 0.95);
@@ -622,7 +429,6 @@ LEADERBOARD_INSERT_SCHEMA = [
     "ACTION_CONTEXT",
     "IMAGE_HASH",
 ]
-DEFAULT_PROFILE_AVATAR = "https://api.dicebear.com/9.x/bottts-neutral/svg?seed=NatureGuardian"
 COMMON_DEED_TYPO_CORRECTIONS = {
     "panted": "planted",
     "planed": "planted",
@@ -779,7 +585,7 @@ def reset_snowflake_session() -> None:
     st.cache_resource.clear()
 
 
-def create_snowflake_session() -> Session:
+def get_snowflake_session() -> Session:
     """Create/reuse a pooled Snowflake session with one self-healing reconnect."""
     existing_session = st.session_state.get("snowflake_session")
     pool = st.session_state.get("snowflake_pool")
@@ -801,10 +607,15 @@ def create_snowflake_session() -> Session:
         raise RuntimeError("Snowflake session unavailable after retry.")
 
 
+def create_snowflake_session() -> Session:
+    """Backward-compatible alias for Snowflake session access."""
+    return get_snowflake_session()
+
+
 @contextmanager
 def pooled_session() -> Session:
     """Yield a session from the pool and return it when done."""
-    session = create_snowflake_session()
+    session = get_snowflake_session()
     try:
         yield session
     finally:
@@ -837,19 +648,41 @@ def _sql_literal(value: Optional[object]) -> str:
 
 
 def insert_leaderboard_row(session: Session, row_payload: dict[str, Optional[object]]) -> None:
-    """Insert exactly the 6 expected non-generated columns into the leaderboard table."""
+    """Insert row payload into available leaderboard columns."""
     required_columns = LEADERBOARD_INSERT_SCHEMA
-    missing_from_payload = [col for col in required_columns if col not in row_payload]
+    existing_columns = get_leaderboard_columns(session)
+    optional_columns = {"IMAGE_HASH"}
+    mandatory_columns = [col for col in required_columns if col not in optional_columns]
+
+    missing_from_table = [col for col in mandatory_columns if col not in existing_columns]
+    if missing_from_table:
+        raise RuntimeError(
+            "CLIMATE_LEADERBOARD schema mismatch. Missing table columns: "
+            + ", ".join(missing_from_table)
+        )
+
+    insert_columns = [col for col in required_columns if col in existing_columns]
+    missing_from_payload = [col for col in insert_columns if col not in row_payload]
     if missing_from_payload:
         raise RuntimeError(
             f"Insert payload missing required columns: {', '.join(missing_from_payload)}"
         )
 
-    values_sql = ", ".join(_sql_literal(row_payload[col]) for col in required_columns)
-    columns_sql = ", ".join(required_columns)
-    session.sql(
-        f"INSERT INTO {LEADERBOARD_TABLE} ({columns_sql}) VALUES ({values_sql})"
-    ).collect()
+    values_sql = ", ".join(_sql_literal(row_payload[col]) for col in insert_columns)
+    columns_sql = ", ".join(insert_columns)
+    try:
+        session.sql(
+            f"INSERT INTO {LEADERBOARD_TABLE} ({columns_sql}) VALUES ({values_sql})"
+        ).collect()
+    except Exception as exc:
+        snowflake_error_code = getattr(exc, "error_code", None) or getattr(exc, "errno", None) or "N/A"
+        snowflake_sql_state = getattr(exc, "sqlstate", None) or "N/A"
+        print(
+            f"Snowflake insert failed [code={snowflake_error_code}, sqlstate={snowflake_sql_state}]: {exc}"
+        )
+        raise RuntimeError(
+            f"Unable to record this deed in Snowflake. code={snowflake_error_code}, sqlstate={snowflake_sql_state}"
+        ) from exc
 
 
 def user_exists(session: Session, username: str) -> bool:
@@ -889,143 +722,26 @@ def get_username_by_wallet_address(session: Session, wallet_address: str) -> Opt
     return str(rows[0]["USERNAME"]).strip() if rows[0]["USERNAME"] else None
 
 
-def get_guardian_profile_by_wallet(session: Session, wallet_address: str) -> Optional[dict[str, Optional[str]]]:
-    """Return persisted Guardian profile fields for a wallet, if present."""
-    rows = (
-        get_leaderboard_df(session)
-        .filter(F.upper(F.col("WALLET_ADDRESS")) == F.lit(wallet_address.upper()))
-        .sort(F.when(F.upper(F.col("DEED_TYPE")) == F.lit("USER_CREATED"), F.lit(0)).otherwise(F.lit(1)))
-        .select("USERNAME", "IMAGE_HASH")
-        .limit(1)
-        .collect()
-    )
-    if not rows:
-        return None
-    return {
-        "username": str(rows[0]["USERNAME"]).strip() if rows[0]["USERNAME"] else None,
-        "image_hash": str(rows[0]["IMAGE_HASH"]).strip() if rows[0]["IMAGE_HASH"] else None,
-    }
-
-
-def wallet_has_profile_row(session: Session, wallet_address: str) -> bool:
-    """Return whether this wallet already has a USER_CREATED profile row."""
-    count = (
-        get_leaderboard_df(session)
-        .filter(F.upper(F.col("WALLET_ADDRESS")) == F.lit(wallet_address.upper()))
-        .filter(F.upper(F.col("DEED_TYPE")) == F.lit("USER_CREATED"))
-        .count()
-    )
-    return count > 0
-
-
-def ensure_profile_row_exists(session: Session, username: str, wallet_address: str) -> None:
-    """Ensure a dedicated USER_CREATED row exists for profile-level updates."""
-    if wallet_has_profile_row(session, wallet_address):
-        return
-    insert_leaderboard_row(
-        session,
-        {
-            "USERNAME": username,
-            "WALLET_ADDRESS": wallet_address,
-            "POINTS": 0,
-            "DEED_TYPE": "USER_CREATED",
-            "ACTION_CONTEXT": "Guardian joined Aether-Chain",
-            "IMAGE_HASH": None,
-        },
-    )
-
-
-def get_wallet_profile_image_hash(session: Session, wallet_address: str) -> Optional[str]:
-    """Get the profile avatar hash/url token from the wallet's profile row."""
-    rows = (
-        get_leaderboard_df(session)
-        .filter(F.upper(F.col("WALLET_ADDRESS")) == F.lit(wallet_address.upper()))
-        .filter(F.upper(F.col("DEED_TYPE")) == F.lit("USER_CREATED"))
-        .select("IMAGE_HASH")
-        .limit(1)
-        .collect()
-    )
-    if not rows:
-        return None
-    return str(rows[0]["IMAGE_HASH"]).strip() if rows[0]["IMAGE_HASH"] else None
-
-
-def update_wallet_profile(
-    session: Session,
-    wallet_address: str,
-    username: Optional[str] = None,
-    profile_image_ref: Optional[str] = None,
-) -> None:
-    """Update wallet profile fields in Snowflake on the USER_CREATED row."""
-    current_username = get_username_by_wallet_address(session, wallet_address) or "Guardian"
-    ensure_profile_row_exists(session, current_username, wallet_address)
-
-    safe_wallet = wallet_address.replace("'", "''")
-    if username is not None:
-        safe_username = username.replace("'", "''")
-        session.sql(
-            f"""
-            UPDATE {LEADERBOARD_TABLE}
-            SET USERNAME = '{safe_username}'
-            WHERE UPPER(WALLET_ADDRESS) = UPPER('{safe_wallet}')
-            """
-        ).collect()
-    if profile_image_ref is not None:
-        safe_ref = profile_image_ref.replace("'", "''")
-        session.sql(
-            f"""
-            UPDATE {LEADERBOARD_TABLE}
-            SET IMAGE_HASH = '{safe_ref}'
-            WHERE UPPER(WALLET_ADDRESS) = UPPER('{safe_wallet}')
-              AND UPPER(DEED_TYPE) = 'USER_CREATED'
-            """
-        ).collect()
-
-
-def generate_username_suggestions(
-    chosen_name: str,
-    wallet_address: str,
-    existing_usernames: set[str],
-    total: int = 3,
-) -> list[str]:
-    """Generate unique username suggestions that are not already taken."""
-    suggestions: list[str] = []
-    base = chosen_name.strip()
-    wallet_suffix = (wallet_address or "").strip()[-4:]
-    candidate_pool = [f"{base}_Nature", f"{base}Nature"]
-    if wallet_suffix:
-        candidate_pool.append(f"{base}_{wallet_suffix}")
-
-    while len(candidate_pool) < 50:
-        candidate_pool.append(f"{base}_{random.randint(100, 999)}")
-
-    seen = set()
-    for candidate in candidate_pool:
-        normalized = candidate.upper()
-        if normalized in existing_usernames or normalized in seen:
-            continue
-        suggestions.append(candidate)
-        seen.add(normalized)
-        if len(suggestions) == total:
-            break
-    return suggestions
-
-
 def create_user_entry(
     session: Session,
     username: str,
     wallet_address: str,
-    image_hash: Optional[str] = None,
 ) -> None:
     """Create a new user entry in the leaderboard if they don't exist."""
     try:
-        ensure_profile_row_exists(session, username, wallet_address)
-        if image_hash:
-            update_wallet_profile(
-                session,
-                wallet_address,
-                profile_image_ref=image_hash,
-            )
+        if get_username_by_wallet_address(session, wallet_address):
+            return
+        insert_leaderboard_row(
+            session,
+            {
+                "USERNAME": username,
+                "WALLET_ADDRESS": wallet_address,
+                "POINTS": 0,
+                "DEED_TYPE": "USER_CREATED",
+                "ACTION_CONTEXT": "User joined Aether-Chain",
+                "IMAGE_HASH": None,
+            },
+        )
     except Exception as exc:
         raise RuntimeError("Unable to sync your profile to Snowflake right now.") from exc
 
@@ -1108,20 +824,27 @@ def record_deed(
     image_hash: Optional[str],
 ) -> None:
     """Record a deed verification result to Snowflake safely."""
+    numeric_points: float | int
+    if isinstance(points, bool):
+        numeric_points = int(points)
+    elif isinstance(points, (int, float)):
+        numeric_points = points
+    else:
+        numeric_points = int(float(points))
     try:
         insert_leaderboard_row(
             session,
             {
                 "USERNAME": username,
                 "WALLET_ADDRESS": wallet_address,
-                "POINTS": points,
+                "POINTS": numeric_points,
                 "DEED_TYPE": deed_type,
                 "ACTION_CONTEXT": action_context,
                 "IMAGE_HASH": image_hash,
             },
         )
     except Exception as exc:
-        raise RuntimeError("Unable to record this deed in Snowflake.") from exc
+        raise RuntimeError(f"Unable to record this deed in Snowflake. Details: {exc}") from exc
 
 
 def deed_image_already_submitted(session: Session, username: str, image_hash: str) -> bool:
@@ -1208,10 +931,10 @@ def generate_daily_wisdom() -> str:
         return "🌍 Every action counts. Plant hope, harvest change. 🌱"
 
 
-def verify_deed_with_gemini(image: Image.Image, action_context: str) -> tuple[bool, int, str]:
+def verify_deed_with_gemini(image: Image.Image, action_context: str) -> tuple[bool, int, str, str]:
     """
     Verify deed using Gemini Vision API.
-    Returns: (is_verified: bool, points: int, analysis: str)
+    Returns: (is_verified: bool, points: int, impact_magnitude: str, analysis: str)
     """
     try:
         model_name = _get_supported_model()
@@ -1219,6 +942,7 @@ def verify_deed_with_gemini(image: Image.Image, action_context: str) -> tuple[bo
             return (
                 False,
                 0,
+                "small",
                 "Error during verification: No Gemini model with generateContent support is available.",
             )
         model = genai.GenerativeModel(model_name)
@@ -1263,16 +987,14 @@ def verify_deed_with_gemini(image: Image.Image, action_context: str) -> tuple[bo
             else "Analysis complete."
         )
 
-        return verified, points, analysis
+        return verified, points, impact, analysis
     except Exception as e:
-        return False, 0, f"Error during verification: {str(e)}"
+        return False, 0, "small", f"Error during verification: {str(e)}"
 
 
 # ============================================================================
 # 6. SESSION STATE INITIALIZATION
 # ============================================================================
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 if "username" not in st.session_state:
@@ -1295,39 +1017,17 @@ if "submitted_upload_keys" not in st.session_state:
     st.session_state.submitted_upload_keys = set()
 if "user_xp" not in st.session_state:
     st.session_state.user_xp = 0
-if "needs_username_registration" not in st.session_state:
-    st.session_state.needs_username_registration = False
-if "wallet_lookup_complete" not in st.session_state:
-    st.session_state.wallet_lookup_complete = False
-if "profile_edit_mode" not in st.session_state:
-    st.session_state.profile_edit_mode = False
-if "profile_image_ref" not in st.session_state:
-    st.session_state.profile_image_ref = None
-if "profile_image_preview" not in st.session_state:
-    st.session_state.profile_image_preview = None
-if "last_wallet_lookup" not in st.session_state:
-    st.session_state.last_wallet_lookup = None
-if "registration_username_value" not in st.session_state:
-    st.session_state.registration_username_value = ""
-if "registration_suggestions" not in st.session_state:
-    st.session_state.registration_suggestions = []
 if "wallet_verified" not in st.session_state:
     st.session_state.wallet_verified = False
 if "verified_wallet_input" not in st.session_state:
     st.session_state.verified_wallet_input = ""
-if "nav_open" not in st.session_state:
-    st.session_state.nav_open = False
-if "nav_section" not in st.session_state:
-    st.session_state.nav_section = "profile"
-if "show_wallet_full" not in st.session_state:
-    st.session_state.show_wallet_full = False
 
 
 # ============================================================================
 # 7. LOGIN PAGE
 # ============================================================================
 def login_page() -> None:
-    """Render manual username + wallet login page."""
+    """Render a minimal username + wallet login page."""
     col1, col2, col3 = st.columns([1, 2, 1])
 
     with col2:
@@ -1361,7 +1061,7 @@ def login_page() -> None:
             manual_username_input = st.text_input(
                 "Username",
                 key="manual_username_input",
-                placeholder="e.g. Harshit_Oak",
+                placeholder="e.g. username_oak",
             )
             manual_wallet_input = st.text_input(
                 "Solana Wallet ID",
@@ -1378,16 +1078,8 @@ def login_page() -> None:
         except Exception:
             st.warning("Unable to fetch username availability right now.")
 
-        if username_input:
-            if username_input.upper() in existing_usernames:
-                st.error("❌ Username already exists in CLIMATE_LEADERBOARD.")
-                suggestions = generate_username_suggestions(username_input, wallet_input, existing_usernames, total=3)
-                if suggestions:
-                    st.caption("Suggested alternatives: " + " • ".join(suggestions))
-            else:
-                suggestions = generate_username_suggestions(username_input, wallet_input, existing_usernames, total=3)
-                if suggestions:
-                    st.caption("Available related names: " + " • ".join(suggestions))
+        if username_input and username_input.upper() in existing_usernames:
+            st.error("❌ Username already exists in CLIMATE_LEADERBOARD.")
 
         if check_in_submit:
             if not username_input:
@@ -1397,24 +1089,19 @@ def login_page() -> None:
             elif not wallet_input:
                 st.error("Please enter your Solana Wallet ID.")
             elif username_input.upper() in existing_usernames:
-                st.error("This username is already taken. Pick one of the suggestions.")
+                st.error("This username is already taken. Please choose a different username.")
             else:
                 try:
                     session = create_snowflake_session()
                     create_user_entry(session, username_input, wallet_input)
                     st.session_state.wallet_address = wallet_input
                     st.session_state.username = username_input
-                    st.session_state.profile_image_ref = get_wallet_profile_image_hash(session, wallet_input)
-                    st.session_state.profile_image_preview = None
                     st.session_state.user_xp = get_user_total_points(session, username_input)
                 except Exception:
                     # Keep login session-based even when Snowflake profile sync is temporarily unavailable.
                     st.session_state.wallet_address = wallet_input
                     st.session_state.username = username_input
-                    st.session_state.profile_image_ref = None
-                    st.session_state.profile_image_preview = None
                     st.session_state.user_xp = 0
-                st.session_state.logged_in = True
                 st.session_state.authenticated = True
                 st.session_state.wallet_verified = True
                 st.session_state.verified_wallet_input = wallet_input
@@ -1424,120 +1111,8 @@ def login_page() -> None:
         st.markdown("</div>", unsafe_allow_html=True)
 
 
-# ============================================================================
-# 8. DASHBOARD PAGE
-# ============================================================================
-def _profile_avatar_data_uri() -> str:
-    """Return data URI for circular icon/avatar image."""
-    if st.session_state.profile_image_preview:
-        return st.session_state.profile_image_preview
-    profile_ref = (st.session_state.profile_image_ref or "").strip()
-    if profile_ref.startswith("profile:sha256:"):
-        return DEFAULT_PROFILE_AVATAR
-    if profile_ref.startswith("data:image/"):
-        return profile_ref
-    if profile_ref:
-        return f"data:image/png;base64,{profile_ref}"
-    return profile_ref or DEFAULT_PROFILE_AVATAR
-
-
-def _render_profile_overlay(session: Session) -> None:
-    """Centered profile view opened from sleek navigation."""
-    icon_src = _profile_avatar_data_uri()
-    points = get_user_total_points(session, st.session_state.username or "") if st.session_state.username else 0
-    level = get_guardian_title(points)
-    wallet_value = st.session_state.wallet_address or ""
-    masked_wallet = shorten_wallet_address(wallet_value)
-    wallet_display = wallet_value if st.session_state.show_wallet_full else masked_wallet
-
-    st.markdown('<div class="overlay-card">', unsafe_allow_html=True)
-    st.markdown(
-        f"""
-        <div class="profile-head">
-            <img src="{html.escape(icon_src)}" class="dashboard-avatar" alt="profile icon">
-            <span class="avatar-update-btn">Update</span>
-        </div>
-        <h3 style="text-align:center; margin-top: 4px;">🌿 Guardian Profile</h3>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.markdown(f"**Username:** {st.session_state.username or 'Guardian'}")
-    wallet_col, eye_col = st.columns([5, 1])
-    with wallet_col:
-        st.markdown(f"**Wallet Security:** `{wallet_display}`")
-    with eye_col:
-        if st.button("👁️", key="toggle_wallet_eye", help="Reveal/hide wallet ID"):
-            st.session_state.show_wallet_full = not st.session_state.show_wallet_full
-            st.rerun()
-    st.markdown(f"**Nature Level:** {level} ({points} XP)")
-
-    if st.button("🚪 Logout", use_container_width=True, key="profile_logout"):
-        st.session_state.logged_in = False
-        st.session_state.username = None
-        st.session_state.wallet_address = None
-        st.session_state.profile_image_ref = None
-        st.session_state.profile_image_preview = None
-        st.session_state.profile_edit_mode = False
-        st.session_state.authenticated = False
-        st.session_state.wallet_verified = False
-        st.session_state.verified_wallet_input = ""
-        st.session_state.show_wallet_full = False
-        st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
-def _render_help_desk() -> None:
-    """Nature themed help desk with FAQ accordions."""
-    st.markdown('<div class="overlay-card faq-shell">', unsafe_allow_html=True)
-    st.markdown("### 🌱 Help Desk")
-    st.markdown("Need guidance? Open a question below.")
-    with st.expander("⬇️ How do I submit a deed?"):
-        st.write("Describe your action, upload an image proof, then click **Verify & Claim Rewards**.")
-    with st.expander("⬇️ How is Nature Level calculated?"):
-        st.write("Nature Level is based on your cumulative XP from verified environmental deeds.")
-    with st.expander("⬇️ Why is my wallet masked?"):
-        st.write("For privacy, wallet IDs are partially hidden by default. Use the eye button to reveal.")
-    with st.expander("⬇️ What if verification fails?"):
-        st.write("Try a clear daylight image showing your real deed and add specific action details.")
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
-def render_sleek_navigation(session: Session) -> None:
-    """Top-left three-dot trigger and slide-out green navigation."""
-    st.markdown('<div class="menu-trigger">', unsafe_allow_html=True)
-    if st.button("⋮", key="menu_toggle"):
-        st.session_state.nav_open = not st.session_state.nav_open
-        st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    nav_class = "open" if st.session_state.nav_open else "closed"
-    st.markdown(f'<div class="slide-nav {nav_class}">', unsafe_allow_html=True)
-    st.markdown("### 🌿 Navigation")
-    if st.button("Profile", key="nav_profile", use_container_width=True):
-        st.session_state.nav_section = "profile"
-        st.session_state.nav_open = False
-        st.rerun()
-    if st.button("Help Desk", key="nav_help", use_container_width=True):
-        st.session_state.nav_section = "help"
-        st.session_state.nav_open = False
-        st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    if st.session_state.nav_section == "help":
-        _render_help_desk()
-    else:
-        _render_profile_overlay(session)
 def dashboard_page(session: Session) -> None:
-    """Render the main dashboard after login."""
-    render_sleek_navigation(session)
-    now_ts = time.time()
-    if (
-        st.session_state.deed_alert_text
-        and st.session_state.deed_alert_time
-        and (now_ts - st.session_state.deed_alert_time > 10)
-    ):
-        st.session_state.deed_alert_text = ""
-        st.session_state.deed_alert_time = 0.0
+    """Render minimalist AI-first page with upload and automatic verification."""
 
     st.markdown(
         """
@@ -1547,49 +1122,6 @@ def dashboard_page(session: Session) -> None:
     """,
         unsafe_allow_html=True,
     )
-    mission_text = "Mission: Reach Earth Legend status by verifying more deeds!"
-    try:
-        preview_points = get_user_total_points(session, st.session_state.username)
-        if get_guardian_title(preview_points) == "Earth Legend":
-            mission_text = "Mission: Maintain Earth Legend status by mentoring and inspiring fellow Guardians!"
-    except Exception:
-        pass
-
-    welcome_col, tip_col = st.columns(2)
-    with welcome_col:
-        st.markdown(
-            f"""
-            <div class="card-container step-card botanical-step">
-                <h3>👋 Welcome, <strong>{html.escape(str(st.session_state.username))}</strong>!</h3>
-                <p><strong>Current Mission:</strong> {mission_text}</p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with tip_col:
-        st.markdown(
-            """
-            <div class="card-container step-card botanical-step">
-                <h3>🌿 Pro-Tip</h3>
-                <p>Did you know? Trees planted in urban areas can reduce local temperatures by up to 8°C!</p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    deed_alert_placeholder = st.empty()
-    if st.session_state.deed_alert_text:
-        deed_alert_placeholder.markdown(
-            f"""
-            <div class="deed-ticker deed-alert">
-                <div class="deed-ticker-track">✨ {st.session_state.deed_alert_text}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    else:
-        deed_alert_placeholder.empty()
-
     wisdom_text = (
         st.session_state.daily_wisdom
         or "🌱 Welcome, Guardian! Upload your first green deed to start your journey."
@@ -1602,71 +1134,19 @@ def dashboard_page(session: Session) -> None:
     """,
         unsafe_allow_html=True,
     )
-    try:
-        deed_updates = get_recent_deed_feed(session, limit=12)
-    except Exception:
-        deed_updates = []
-
-    deed_ticker_text = (
-        " ✦ ".join(html.escape(item) for item in deed_updates)
-        if deed_updates
-        else "A Guardian has just planted native trees! ✦ A Guardian has just cleaned up a riverbank!"
-    )
-    st.markdown(
-        f"""
-        <div class="deed-ticker">
-            <div class="deed-ticker-track">🌿 {deed_ticker_text}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
     st.markdown("### 🌍 Submit Your Environmental Deed")
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown('<div class="card-container step-card botanical-step">', unsafe_allow_html=True)
-        st.markdown("**Step 1: Describe Your Action**")
-        raw_action_context = st.text_area(
-            "What environmental action did you take?",
-            placeholder="E.g., 'I planted 3 Neem trees in my garden' or 'Cleaned up plastic waste from the beach'",
-            height=100,
-            label_visibility="collapsed",
-        ).strip()
-        action_context = normalize_action_context(raw_action_context)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    with col2:
-        st.markdown('<div class="card-container step-card botanical-step">', unsafe_allow_html=True)
-        st.markdown("**Step 2: Upload Proof**")
-        uploaded_file = st.file_uploader(
-            "📸 Upload image or video proof",
-            type=["jpg", "jpeg", "png", "mp4", "mov"],
-            label_visibility="collapsed",
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    filler_col1, filler_col2 = st.columns(2)
-    with filler_col1:
-        st.markdown(
-            """
-            <div class="botanical-filler">
-                <strong>🌿 Native Habitat Spotlight</strong><br><br>
-                Add details like species planted, cleanup location, or community impact for richer proof.
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with filler_col2:
-        st.markdown(
-            """
-            <div class="botanical-filler">
-                <strong>🍃 Deed Quality Tip</strong><br><br>
-                Use clear daylight photos with your action visible so verification stays smooth and fair.
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+    st.markdown('<div class="card-container">', unsafe_allow_html=True)
+    raw_action_context = st.text_area(
+        "What environmental action did you take?",
+        placeholder="E.g., I planted 3 trees in my neighborhood park",
+        height=100,
+    ).strip()
+    action_context = normalize_action_context(raw_action_context)
+    uploaded_file = st.file_uploader(
+        "📸 Upload image evidence",
+        type=["jpg", "jpeg", "png"],
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
 
     if action_context and uploaded_file:
         st.markdown('<div class="card-container">', unsafe_allow_html=True)
@@ -1689,9 +1169,8 @@ def dashboard_page(session: Session) -> None:
         ):
             st.warning("⚠️ You have already submitted this specific upload in this session.")
 
-        st.markdown('<div class="verify-button">', unsafe_allow_html=True)
-        verify_clicked = st.button(
-            "✅ Verify & Claim Rewards",
+        analyze_clicked = st.button(
+            "✅ Analyze with AI & Record Deed",
             type="primary",
             use_container_width=True,
             disabled=(
@@ -1699,8 +1178,8 @@ def dashboard_page(session: Session) -> None:
                 or submission_key in st.session_state.submitted_upload_keys
             ),
         )
-        st.markdown("</div>", unsafe_allow_html=True)
-        if verify_clicked:
+
+        if analyze_clicked:
             if not is_image:
                 st.warning("⚠️ Please upload a JPG or PNG image for AI verification.")
             else:
@@ -1716,7 +1195,7 @@ def dashboard_page(session: Session) -> None:
                         st.session_state.last_processed_submission_key = submission_key
                         st.session_state.submitted_upload_keys.add(submission_key)
                         img = Image.open(uploaded_file)
-                        verified, points, analysis = verify_deed_with_gemini(img, action_context)
+                        verified, points, impact_magnitude, analysis = verify_deed_with_gemini(img, action_context)
 
                         deed_type = "Verified Deed" if verified else "Rejected Deed"
                         record_deed(
@@ -1729,103 +1208,28 @@ def dashboard_page(session: Session) -> None:
                             image_hash,
                         )
 
+                        eligibility = "Eligible for deed points ✅" if verified else "Not eligible for deed points ❌"
+                        deed_size = (
+                            "Large deed impact 🌳" if verified and impact_magnitude == "large"
+                            else "Small deed impact 🌱" if verified
+                            else "No impact points awarded"
+                        )
+
                         if verified:
-                            st.session_state.deed_alert_text = (
-                                f"{html.escape(st.session_state.username)} has just {html.escape(action_context)}!"
-                            )
-                            st.session_state.deed_alert_time = time.time()
-                            st.session_state.last_awarded_points = points
-                            st.session_state.last_award_time = time.time()
-                            st.markdown(
-                                f"""
-                                <div class="success-modal card-container" style="border: 2px solid #2db968; background: linear-gradient(135deg, #0f3018 0%, #1a8f4f20 100%);">
-                                    <h2 style="text-align: center; color: #2db968;">✨ Deed Verified!</h2>
-                                    <p style="text-align: center; font-size: 1.1rem; color: #e8f5e9;">
-                                        Thank you for your deed!<br>
-                                        <strong>Your contribution to Earth has been recorded on-chain.</strong>
-                                    </p>
-                                    <p style="text-align: center; font-size: 2rem; color: #2db968; font-weight: bold;">
-                                        +{points} XP Awarded!
-                                    </p>
-                                </div>
-                                """,
-                                unsafe_allow_html=True,
-                            )
+                            st.success(f"✅ Deed verified and recorded. +{points} XP awarded.")
                             st.balloons()
                         else:
-                            st.warning("⚠️ Deed could not be verified. Please check your image and try again.")
+                            st.warning("⚠️ Deed analyzed but not verified for points.")
 
-                        st.info(f"🤖 **AI Analysis:** {analysis}")
-
+                        st.info(
+                            f"🤖 **AI Analysis:** {analysis}\n\n"
+                            f"**Impact category:** {deed_size}\n\n"
+                            f"**Eligibility:** {eligibility}"
+                        )
                     except Exception as e:
                         st.error(f"❌ Verification failed: {str(e)}")
 
         st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown("---")
-
-    try:
-        user_points = get_user_total_points(session, st.session_state.username)
-        title = get_guardian_title(user_points)
-        floor, next_target = get_next_rank_target(user_points)
-        if next_target is None:
-            progress_pct = 100.0
-            progress_caption = "Max rank achieved"
-        else:
-            span = max(1, next_target - floor)
-            progress_pct = max(0.0, min(100.0, ((user_points - floor) / span) * 100))
-            progress_caption = f"{max(next_target - user_points, 0)} XP to {get_guardian_title(next_target)}"
-
-        mask_wallet = f"{st.session_state.wallet_address[:4]}...{st.session_state.wallet_address[-4:]}"
-        show_float = (
-            st.session_state.last_awarded_points > 0
-            and (time.time() - st.session_state.last_award_time) < 2.5
-        )
-
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown(
-                f"""
-            <div class="card-container" style="text-align: center; position: relative;">
-                <h3 style="color: #2db968; margin: 0;">Your XP</h3>
-                <p class="xp-value {'bump' if show_float else ''}" style="font-size: 2.5rem; color: #2db968; font-weight: bold; margin: 10px 0;">
-                    {user_points}
-                </p>
-                {f'<div class="xp-float">+{st.session_state.last_awarded_points} XP</div>' if show_float else ''}
-            </div>
-            """,
-                unsafe_allow_html=True,
-            )
-
-        with col2:
-            st.markdown(
-                f"""
-            <div class="card-container wallet-card">
-                <h3 style="color: #7ef0ac; margin: 0;">Private Wallet</h3>
-                <p style="font-size: 1.05rem; color: #e8f5e9; margin: 14px 0 0; letter-spacing: 1px;">
-                    {mask_wallet}
-                </p>
-            </div>
-            """,
-                unsafe_allow_html=True,
-            )
-
-        with col3:
-            status_class = "title-pill legendary" if title == "Earth Legend" else "title-pill"
-            st.markdown(
-                f"""
-            <div class="status-card">
-                <h3 style="color: #8ff7b9; margin: 0;">Status</h3>
-                <div class="{status_class}">{title}</div>
-                <div style="font-size: 0.84rem; color: #b5ffcb;">Progress to next rank</div>
-                <div class="progress-wrap"><div class="progress-bar" style="width: {progress_pct:.1f}%;"></div></div>
-                <div style="font-size: 0.82rem; color: #9de7b8;">{progress_caption}</div>
-            </div>
-            """,
-                unsafe_allow_html=True,
-            )
-    except Exception:
-        st.warning("Could not load user stats.")
 
     st.markdown("---")
 
@@ -1840,56 +1244,15 @@ def dashboard_page(session: Session) -> None:
             leaderboard_df = leaderboard_df.sort_values(by="POINTS", ascending=False, kind="stable").head(20).reset_index(drop=True)
             leaderboard_df.insert(0, "RANK", range(1, len(leaderboard_df) + 1))
             leaderboard_df.insert(1, "LEVEL", leaderboard_df["POINTS"].apply(get_guardian_title))
-
-            table_html = "<table class='leaderboard-table'><thead><tr><th>Rank</th><th>Level</th><th>Guardian</th><th>Total XP</th></tr></thead><tbody>"
-            for _, row in leaderboard_df.iterrows():
-                rank = int(row["RANK"])
-                row_class = f"rank-{rank}" if rank <= 3 else ""
-                guardian = html.escape(str(row["USERNAME"]))
-                level = html.escape(str(row["LEVEL"]))
-                xp = html.escape(str(int(row["POINTS"])))
-                table_html += (
-                    f"<tr class='{row_class}'>"
-                    f"<td>{rank}</td>"
-                    f"<td>{level}</td>"
-                    f"<td>{guardian}</td>"
-                    f"<td>{xp} XP</td>"
-                    f"</tr>"
-                )
-            table_html += "</tbody></table>"
-
-            leaderboard_html = textwrap.dedent(
-                f"""
-                <div class="nature-panel">
-                    <div class="leaderboard-shell">
-                        {table_html}
-                    </div>
-                </div>
-                """
-            ).strip()
-            st.markdown(leaderboard_html, unsafe_allow_html=True)
-        else:
-            st.markdown(
-                """
-                <div class="nature-panel">
-                    <div class="card-container" style="margin: 0;">
-                        🌱 Be the first to verify a deed and top the leaderboard!
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
+            st.dataframe(
+                leaderboard_df[["RANK", "LEVEL", "USERNAME", "POINTS"]],
+                use_container_width=True,
+                hide_index=True,
             )
+        else:
+            st.info("🌱 Be the first to verify a deed and top the leaderboard!")
     except Exception:
-        st.markdown(
-            """
-            <div class="nature-panel">
-                <div class="card-container" style="margin: 0;">
-                    📊 Leaderboard is being initialized. Check back soon!
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        st.info("📊 Leaderboard is being initialized. Check back soon!")
 
 
 # ============================================================================
