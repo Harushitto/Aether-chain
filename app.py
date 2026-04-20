@@ -1297,17 +1297,22 @@ def login_page() -> None:
         st.markdown('<div class="card-container">', unsafe_allow_html=True)
         st.markdown("#### 🔐 Smart Check-In")
 
-        manual_wallet_input = st.text_input(
-            "Wallet ID",
-            key="manual_wallet_input",
-            placeholder="e.g. 9xQeWvG816bUx9EPfPy...",
-        )
-        submitted_wallet = manual_wallet_input.strip()
-        if submitted_wallet and submitted_wallet != st.session_state.last_wallet_lookup:
-            st.session_state.last_wallet_lookup = submitted_wallet
-            if not SOLANA_WALLET_PATTERN.fullmatch(submitted_wallet):
+        with st.form("smart_checkin_form"):
+            manual_wallet_input = st.text_input(
+                "Wallet ID",
+                key="manual_wallet_input",
+                placeholder="e.g. 9xQeWvG816bUx9EPfPy...",
+            )
+            check_in_submit = st.form_submit_button("Sign In / Register", use_container_width=True)
+
+        if check_in_submit:
+            submitted_wallet = manual_wallet_input.strip()
+            if not submitted_wallet:
+                st.error("Please enter your Wallet ID to continue.")
+            elif not SOLANA_WALLET_PATTERN.fullmatch(submitted_wallet):
                 st.error("Invalid Solana Wallet ID format.")
             else:
+                st.session_state.last_wallet_lookup = submitted_wallet
                 try:
                     session = create_snowflake_session()
                     guardian_profile = get_guardian_profile_by_wallet(session, submitted_wallet)
@@ -1330,7 +1335,7 @@ def login_page() -> None:
                         st.session_state.wallet_lookup_complete = True
                         st.session_state.needs_username_registration = True
                 except Exception:
-                    pass
+                    st.error("Unable to validate wallet right now. Please try again.")
 
         if st.session_state.wallet_lookup_complete and st.session_state.needs_username_registration:
             st.info("🟢 Green Initiation: New wallet detected. Complete your guardian profile.")
