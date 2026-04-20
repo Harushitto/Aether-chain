@@ -1226,6 +1226,10 @@ if "profile_image_preview" not in st.session_state:
     st.session_state.profile_image_preview = None
 if "last_wallet_lookup" not in st.session_state:
     st.session_state.last_wallet_lookup = None
+if "registration_username_value" not in st.session_state:
+    st.session_state.registration_username_value = ""
+if "registration_suggestions" not in st.session_state:
+    st.session_state.registration_suggestions = []
 
 
 # ============================================================================
@@ -1331,20 +1335,21 @@ def login_page() -> None:
                         st.session_state.authenticated = True
                         st.session_state.needs_username_registration = False
                         st.session_state.wallet_lookup_complete = False
+                        st.session_state.registration_suggestions = []
+                        st.session_state.registration_username_value = ""
                         st.session_state.daily_wisdom = generate_daily_wisdom()
-                        st.success("Existing guardian found. Redirecting now...")
                         st.rerun()
                     else:
                         st.session_state.wallet_address = submitted_wallet
                         st.session_state.wallet_lookup_complete = True
                         st.session_state.needs_username_registration = True
+                        st.session_state.registration_suggestions = []
+                        st.session_state.registration_username_value = ""
                 except Exception:
-                    st.session_state.wallet_address = submitted_wallet
-                    st.session_state.wallet_lookup_complete = True
-                    st.session_state.needs_username_registration = True
-                    st.warning(
-                        "Live wallet validation is temporarily unavailable. "
-                        "You can continue by setting up your guardian profile now."
+                    st.session_state.wallet_lookup_complete = False
+                    st.session_state.needs_username_registration = False
+                    st.error(
+                        "We couldn't verify your wallet right now. Please try again in a moment."
                     )
 
         if st.session_state.wallet_lookup_complete and st.session_state.needs_username_registration:
@@ -1353,17 +1358,14 @@ def login_page() -> None:
                 registration_username = st.text_input(
                     "Choose Username",
                     key="register_guardian_name",
+                    value=st.session_state.registration_username_value,
                     placeholder="Choose a unique guardian name",
-                )
-                initiation_image = st.file_uploader(
-                    "Optional Profile Picture",
-                    type=["jpg", "jpeg", "png"],
-                    key="green_initiation_image",
                 )
                 register_submit = st.form_submit_button("Begin Journey", use_container_width=True)
 
             if register_submit:
                 candidate_name = registration_username.strip()
+                st.session_state.registration_username_value = candidate_name
                 if not candidate_name:
                     st.error("Please enter a Guardian Name before continuing.")
                 else:
@@ -1377,28 +1379,45 @@ def login_page() -> None:
                                 st.session_state.wallet_address or "",
                                 existing_usernames,
                             )
+                            st.session_state.registration_suggestions = suggestions
                             if suggestions:
                                 st.info("Try one of these available usernames: " + ", ".join(suggestions))
                         else:
-                            image_payload = uploaded_image_to_base64(initiation_image)
                             create_user_entry(
                                 session,
                                 candidate_name,
                                 st.session_state.wallet_address or "",
-                                image_hash=image_payload,
                             )
                             st.session_state.username = candidate_name
-                            st.session_state.profile_image_ref = image_payload
+                            st.session_state.profile_image_ref = get_wallet_profile_image_hash(
+                                session, st.session_state.wallet_address or ""
+                            )
                             st.session_state.profile_image_preview = None
                             st.session_state.user_xp = get_user_total_points(session, candidate_name)
                             st.session_state.logged_in = True
                             st.session_state.authenticated = True
                             st.session_state.needs_username_registration = False
                             st.session_state.wallet_lookup_complete = False
+                            st.session_state.registration_suggestions = []
+                            st.session_state.registration_username_value = ""
                             st.session_state.daily_wisdom = generate_daily_wisdom()
                             st.rerun()
                     except Exception:
                         st.error("Unable to complete Green Initiation right now.")
+
+            if st.session_state.registration_suggestions:
+                st.caption("Suggested available usernames:")
+                suggestion_columns = st.columns(2)
+                for idx, suggestion in enumerate(st.session_state.registration_suggestions):
+                    with suggestion_columns[idx % 2]:
+                        if st.button(
+                            f"Begin Journey as {suggestion}",
+                            key=f"register_suggested_name_{idx}",
+                            use_container_width=True,
+                        ):
+                            st.session_state.register_guardian_name = suggestion
+                            st.session_state.registration_username_value = suggestion
+                            st.rerun()
 
         wallet_address = (st.session_state.wallet_address or "").strip()
 
