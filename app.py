@@ -643,14 +643,6 @@ COMMON_DEED_TYPO_CORRECTIONS = {
 
 
 
-def shorten_wallet_address(wallet_address: str) -> str:
-    """Return compact wallet display for username synthesis."""
-    cleaned = (wallet_address or "").strip()
-    if len(cleaned) <= 10:
-        return cleaned
-    return f"{cleaned[:4]}...{cleaned[-3:]}"
-
-
 def verify_wallet(wallet_input: str) -> tuple[bool, str]:
     """Validate and normalize a Solana wallet address from text input."""
     normalized_wallet = (wallet_input or "").strip()
@@ -1337,10 +1329,6 @@ if "verified_wallet_input" not in st.session_state:
     st.session_state.verified_wallet_input = ""
 if "nav_open" not in st.session_state:
     st.session_state.nav_open = False
-if "nav_section" not in st.session_state:
-    st.session_state.nav_section = "dashboard"
-if "show_wallet_full" not in st.session_state:
-    st.session_state.show_wallet_full = False
 if "last_award_deed" not in st.session_state:
     st.session_state.last_award_deed = ""
 if "share_message" not in st.session_state:
@@ -1408,10 +1396,6 @@ def login_page() -> None:
                 suggestions = generate_username_suggestions(username_input, wallet_input, existing_usernames, total=3)
                 if suggestions:
                     st.caption("Suggested alternatives: " + " • ".join(suggestions))
-            else:
-                suggestions = generate_username_suggestions(username_input, wallet_input, existing_usernames, total=3)
-                if suggestions:
-                    st.caption("Available related names: " + " • ".join(suggestions))
 
         if check_in_submit:
             if not username_input:
@@ -1477,36 +1461,72 @@ def _profile_avatar_data_uri() -> str:
     return profile_ref or DEFAULT_PROFILE_AVATAR
 
 
+def _center_crop_to_square(image: Image.Image, target_size: int = 512) -> Image.Image:
+    """Crop image to centered 1:1 square and resize for avatar use."""
+    rgb_image = image.convert("RGB")
+    width, height = rgb_image.size
+    crop_size = min(width, height)
+    left = (width - crop_size) // 2
+    top = (height - crop_size) // 2
+    cropped = rgb_image.crop((left, top, left + crop_size, top + crop_size))
+    return cropped.resize((target_size, target_size), Image.Resampling.LANCZOS)
+
+
+@st.dialog("🌿 Guardian Profile", width="large")
 def _render_profile_overlay(session: Session) -> None:
-    """Centered profile view opened from sleek navigation."""
+    """Profile modal opened from three-dot navigation."""
     icon_src = _profile_avatar_data_uri()
     points = get_user_total_points(session, st.session_state.username or "") if st.session_state.username else 0
     level = get_guardian_title(points)
     wallet_value = st.session_state.wallet_address or ""
-    masked_wallet = shorten_wallet_address(wallet_value)
-    wallet_display = wallet_value if st.session_state.show_wallet_full else masked_wallet
 
-    st.markdown('<div class="overlay-card">', unsafe_allow_html=True)
     st.markdown(
         f"""
         <div class="profile-head">
             <img src="{html.escape(icon_src)}" class="dashboard-avatar" alt="profile icon">
-            <span class="avatar-update-btn">Update</span>
         </div>
-        <h3 style="text-align:center; margin-top: 4px;">🌿 Guardian Profile</h3>
+        <h3 style="text-align:center; margin-top: 4px;">Guardian Profile</h3>
         """,
         unsafe_allow_html=True,
     )
+    if st.button("🖼️ Update Avatar", key="profile_update_avatar_btn", use_container_width=True):
+        st.session_state.profile_edit_mode = not st.session_state.profile_edit_mode
+        st.rerun()
+
+    if st.session_state.profile_edit_mode:
+        uploaded_avatar = st.file_uploader(
+            "Upload a new profile image",
+            type=["jpg", "jpeg", "png"],
+            key="profile_avatar_uploader",
+        )
+        if uploaded_avatar is not None:
+            source_image = Image.open(uploaded_avatar)
+            cropped_avatar = _center_crop_to_square(source_image)
+            st.image(cropped_avatar, caption="1:1 avatar preview", width=160)
+            if st.button("✅ Save Avatar", key="save_avatar_button", use_container_width=True):
+                avatar_data_uri = image_to_data_uri(cropped_avatar, format="PNG")
+                st.session_state.profile_image_preview = avatar_data_uri
+                st.session_state.profile_image_ref = avatar_data_uri
+                st.session_state.profile_edit_mode = False
+                try:
+                    persist_profile_updates(
+                        session,
+                        st.session_state.username or "Guardian",
+                        wallet_value,
+                        avatar_data_uri,
+                    )
+                except RuntimeError as exc:
+                    st.warning(str(exc))
+                st.success("Profile avatar updated.")
+                st.rerun()
+
     st.markdown(f"**Username:** {st.session_state.username or 'Guardian'}")
-    wallet_col, eye_col = st.columns([5, 1])
-    with wallet_col:
-        st.markdown(f"**Wallet Security:** `{wallet_display}`")
-    with eye_col:
-        if st.button("👁️", key="toggle_wallet_eye", help="Reveal/hide wallet ID"):
-            st.session_state.show_wallet_full = not st.session_state.show_wallet_full
-            st.rerun()
+    st.markdown(f"**Wallet Security Box:** `{wallet_value}`")
     st.markdown(f"**Nature Level:** {level} ({points} XP)")
 
+    if st.button("Close", key="profile_modal_close", use_container_width=True):
+        st.session_state.profile_edit_mode = False
+        st.rerun()
     if st.button("🚪 Logout", use_container_width=True, key="profile_logout"):
         st.session_state.logged_in = False
         st.session_state.username = None
@@ -1517,26 +1537,22 @@ def _render_profile_overlay(session: Session) -> None:
         st.session_state.authenticated = False
         st.session_state.wallet_verified = False
         st.session_state.verified_wallet_input = ""
-        st.session_state.show_wallet_full = False
         st.session_state.share_message = ""
         st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
 
 
+@st.dialog("🌱 Help Desk", width="large")
 def _render_help_desk() -> None:
-    """Nature themed help desk with FAQ accordions."""
-    st.markdown('<div class="overlay-card faq-shell">', unsafe_allow_html=True)
-    st.markdown("### 🌱 Help Desk")
+    """Help desk modal with FAQ accordions."""
     st.markdown("Need guidance? Open a question below.")
     with st.expander("⬇️ How do I submit a deed?"):
         st.write("Describe your action, upload an image proof, then click **Verify & Claim Rewards**.")
     with st.expander("⬇️ How is Nature Level calculated?"):
         st.write("Nature Level is based on your cumulative XP from verified environmental deeds.")
-    with st.expander("⬇️ Why is my wallet masked?"):
-        st.write("For privacy, wallet IDs are partially hidden by default. Use the eye button to reveal.")
     with st.expander("⬇️ What if verification fails?"):
         st.write("Try a clear daylight image showing your real deed and add specific action details.")
-    st.markdown("</div>", unsafe_allow_html=True)
+    if st.button("Close", key="help_modal_close", use_container_width=True):
+        st.rerun()
 
 
 def get_user_rank(session: Session, username: str) -> Optional[int]:
@@ -1568,19 +1584,20 @@ def render_sleek_navigation(session: Session) -> None:
     nav_class = "open" if st.session_state.nav_open else "closed"
     st.markdown(f'<div class="slide-nav {nav_class}">', unsafe_allow_html=True)
     st.markdown("### 🌿 Navigation")
-    if st.button("Profile", key="nav_profile", use_container_width=True):
-        st.session_state.nav_section = "profile"
+    open_profile = st.button("Profile", key="nav_profile", use_container_width=True)
+    if open_profile:
         st.session_state.nav_open = False
-        st.rerun()
-    if st.button("Help Desk", key="nav_help", use_container_width=True):
-        st.session_state.nav_section = "help"
+    open_help = st.button("Help Desk", key="nav_help", use_container_width=True)
+    if open_help:
+        st.session_state.nav_open = False
+    if st.button("Close Menu", key="nav_close", use_container_width=True):
         st.session_state.nav_open = False
         st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
-    if st.session_state.nav_section == "help":
+    if open_help:
         _render_help_desk()
-    elif st.session_state.nav_section == "profile":
+    elif open_profile:
         _render_profile_overlay(session)
 
 
@@ -1761,13 +1778,12 @@ def dashboard_page(session: Session) -> None:
             progress_pct = max(0.0, min(100.0, ((user_points - floor) / span) * 100))
             progress_caption = f"{max(next_target - user_points, 0)} XP to {get_guardian_title(next_target)}"
 
-        mask_wallet = f"{st.session_state.wallet_address[:4]}...{st.session_state.wallet_address[-4:]}"
         show_float = (
             st.session_state.last_awarded_points > 0
             and (time.time() - st.session_state.last_award_time) < 2.5
         )
 
-        col1, col2, col3 = st.columns(3)
+        col1, col3 = st.columns(2)
         with col1:
             st.markdown(
                 f"""
@@ -1813,19 +1829,6 @@ def dashboard_page(session: Session) -> None:
                     )
                 time.sleep(5)
                 share_slot.empty()
-
-        with col2:
-            st.markdown(
-                f"""
-            <div class="card-container wallet-card">
-                <h3 style="color: #7ef0ac; margin: 0;">Private Wallet</h3>
-                <p style="font-size: 1.05rem; color: #e8f5e9; margin: 14px 0 0; letter-spacing: 1px;">
-                    {mask_wallet}
-                </p>
-            </div>
-            """,
-                unsafe_allow_html=True,
-            )
 
         with col3:
             status_class = "title-pill legendary" if title == "Earth Legend" else "title-pill"
